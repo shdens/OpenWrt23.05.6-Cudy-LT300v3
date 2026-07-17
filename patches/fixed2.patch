@@ -1,0 +1,289 @@
+From b4a5e57bde64199f15ce69fd21b8608bade11ba4 Mon Sep 17 00:00:00 2001
+From: Fil Dunsky <filipp.dunsky@gmail.com>
+Date: Sun, 9 Feb 2026 09:03:58 +0000
+Subject: [PATCH] ramips: mt76x8: add support for Cudy LT300 v3
+
+Hardware:
+ - SoC: MediaTek MT7628AN (MIPS 580MHz)
+ - Flash: 16 MiB NOR
+ - RAM: 64 MiB DDR2
+ - WLAN: 2.4 GHz (MT7628)
+ - Ethernet: 1x 10/100 Mbps WAN/LAN, 1x 10/100 LAN (MT7628)
+ - Build-in LTE Modem: MeigLink SLM770A
+   4G Cat. 4 (150/50 Mbps)
+ - Buttons: 1x Reset, 1x wps
+ - LEDs: Front: 1x Red, 1x White,
+         Back: 3x White 4G signal strengh
+ - Serial console: unpopulated header, 115200 8n1
+ - Power: USB-C
+
+Backported from main (commit b4a5e57bde64) to v23.05.6.
+Adapted DTS for 23.05-compatible nvmem-cells with mac-base.
+
+Signed-off-by: Fil Dunsky <filipp.dunsky@gmail.com>
+---
+ .../ramips/dts/mt7628an_cudy_lt300-v3.dts     | 183 ++++++++++++++++++
+ target/linux/ramips/image/mt76x8.mk           |  11 ++
+ .../mt76x8/base-files/etc/board.d/01_leds     |   3 +
+ .../mt76x8/base-files/etc/board.d/02_network  |   9 +
+ 4 files changed, 206 insertions(+)
+ create mode 100644 target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
+
+diff --git a/target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts b/target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
+new file mode 100644
+index 0000000000..0000000001
+--- /dev/null
++++ b/target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
+@@ -0,0 +1,190 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "mt7628an.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/leds/common.h>
++
++/ {
++	compatible = "cudy,lt300-v3", "mediatek,mt7628an-soc";
++	model = "Cudy LT300 v3";
++
++	aliases {
++		led-boot = &white_status;
++		led-running = &white_status;
++		led-failsafe = &red_status;
++		led-upgrade = &red_status;
++		label-mac-device = &ethernet;
++	};
++
++	chosen {
++		bootargs = "console=ttyS0,115200";
++	};
++
++	gpio-keys {
++		compatible = "gpio-keys";
++
++		reset {
++			label = "reset";
++			linux,code = <KEY_RESTART>;
++			gpios = <&gpio 38 GPIO_ACTIVE_LOW>;
++		};
++
++		wps {
++			label = "wps";
++			gpios = <&gpio 5 GPIO_ACTIVE_LOW>;
++			linux,code = <KEY_WPS_BUTTON>;
++		};
++	};
++
++	gpio-leds {
++		compatible = "gpio-leds";
++
++		red_status: red_status {
++			function = LED_FUNCTION_STATUS;
++			color = <LED_COLOR_ID_RED>;
++			gpios = <&gpio 37 GPIO_ACTIVE_LOW>;
++		};
++
++		white_status: white_status {
++			function = LED_FUNCTION_STATUS;
++			color = <LED_COLOR_ID_WHITE>;
++			gpios = <&gpio 44 GPIO_ACTIVE_LOW>;
++		};
++
++		signal1 {
++			label = "white:signal1";
++			color = <LED_COLOR_ID_WHITE>;
++			gpios = <&gpio 11 GPIO_ACTIVE_LOW>;
++		};
++
++		signal2 {
++			label = "white:signal2";
++			color = <LED_COLOR_ID_WHITE>;
++			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
++		};
++
++		signal3 {
++			label = "white:signal3";
++			color = <LED_COLOR_ID_WHITE>;
++			gpios = <&gpio 0 GPIO_ACTIVE_LOW>;
++		};
++	};
++
++	gpio_export {
++		compatible = "gpio-export";
++
++		usb4g {
++			gpio-export,name = "4g";
++			gpio-export,output = <0>;
++			gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
++		};
++	};
++};
++
++&spi0 {
++	status = "okay";
++
++	flash@0 {
++		compatible = "jedec,spi-nor";
++		reg = <0>;
++		spi-max-frequency = <40000000>;
++
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				label = "u-boot";
++				reg = <0x0 0x30000>;
++				read-only;
++			};
++
++			partition@30000 {
++				label = "u-boot-env";
++				reg = <0x30000 0x10000>;
++				read-only;
++			};
++
++			partition@40000 {
++				label = "factory";
++				reg = <0x40000 0x10000>;
++				read-only;
++
++				nvmem-layout {
++					compatible = "fixed-layout";
++					#address-cells = <1>;
++					#size-cells = <1>;
++
++					eeprom_factory_0: eeprom@0 {
++						reg = <0x0 0x400>;
++					};
++				};
++			};
++
++			partition@50000 {
++				compatible = "denx,uimage";
++				label = "firmware";
++				reg = <0x50000 0xf80000>;
++			};
++
++			partition@fd0000 {
++				label = "debug";
++				reg = <0xfd0000 0x10000>;
++				read-only;
++			};
++
++			partition@fe0000 {
++				label = "backup";
++				reg = <0xfe0000 0x10000>;
++				read-only;
++			};
++
++			partition@ff0000 {
++				label = "bdinfo";
++				reg = <0xff0000 0x10000>;
++				read-only;
++
++				compatible = "nvmem-cells";
++
++				nvmem-layout {
++					compatible = "fixed-layout";
++					#address-cells = <1>;
++					#size-cells = <1>;
++
++					macaddr_bdinfo_de00: macaddr@de00 {
++						compatible = "mac-base";
++						reg = <0xde00 0x6>;
++						#nvmem-cell-cells = <1>;
++					};
++				};
++			};
++		};
++	};
++};
++
++&state_default {
++	gpio {
++		groups = "i2s", "i2c", "gpio", "refclk", "wdt", "wled_an";
++		function = "gpio";
++	};
++};
++
++&wmac {
++	status = "okay";
++
++	nvmem-cells = <&eeprom_factory_0>, <&macaddr_bdinfo_de00 2>;
++	nvmem-cell-names = "eeprom", "mac-address";
++};
++
++&ethernet {
++	nvmem-cells = <&macaddr_bdinfo_de00 0>;
++	nvmem-cell-names = "mac-address";
++};
++
++&esw {
++	mediatek,portmap = <0x3e>;
++	mediatek,portdisable = <0x3c>;
++};
+diff --git a/target/linux/ramips/image/mt76x8.mk b/target/linux/ramips/image/mt76x8.mk
+index 0000000000..0000000001 100644
+--- a/target/linux/ramips/image/mt76x8.mk
++++ b/target/linux/ramips/image/mt76x8.mk
+@@ -166,6 +166,17 @@ define Device/cudy_tr1200-v1
+ endef
+ TARGET_DEVICES += cudy_tr1200-v1
+ 
++define Device/cudy_lt300-v3
++  IMAGE_SIZE := 15872k
++  DEVICE_VENDOR := Cudy
++  DEVICE_MODEL := LT300
++  DEVICE_VARIANT := v3
++  DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis \
++	kmod-usb-serial-option
++  SUPPORTED_DEVICES += R100
++endef
++TARGET_DEVICES += cudy_lt300-v3
++
+ define Device/cudy_wr1000
+   IMAGE_SIZE := 7872k
+   IMAGES += factory.bin
+diff --git a/target/linux/ramips/mt76x8/base-files/etc/board.d/01_leds b/target/linux/ramips/mt76x8/base-files/etc/board.d/01_leds
+index 0000000000..0000000001 100644
+--- a/target/linux/ramips/mt76x8/base-files/etc/board.d/01_leds
++++ b/target/linux/ramips/mt76x8/base-files/etc/board.d/01_leds
+@@ -19,5 +19,8 @@ netgear,r6120)
+ 	ucidef_set_led_switch "wan" "wan" "green:wan" "switch0" "0x10"
+ 	;;
++cudy,lt300-v3)
++	ucidef_set_led_netdev "internet" "internet" "white:status" "usb0"
++	;;
+ cudy,wr1000)
+ 	ucidef_set_led_switch "wan" "wan" "blue:wan" "switch0" "0x10"
+ 	ucidef_set_led_switch "lan1" "lan1" "blue:lan1" "switch0" "0x08"
+diff --git a/target/linux/ramips/mt76x8/base-files/etc/board.d/02_network b/target/linux/ramips/mt76x8/base-files/etc/board.d/02_network
+index 0000000000..0000000001 100644
+--- a/target/linux/ramips/mt76x8/base-files/etc/board.d/02_network
++++ b/target/linux/ramips/mt76x8/base-files/etc/board.d/02_network
+@@ -92,6 +92,12 @@ ramips_setup_interfaces()
+ 	cudy,tr1200-v1)
+ 		ucidef_add_switch "switch0" \
+ 			"0:lan" "1:wan" "6@eth0"
++		;;
++	cudy,lt300-v3)
++		ucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"
++		ucidef_set_interface "wwan" device "usb0" protocol "dhcp"
++		uci add_list firewall.@zone[1].network='wwan'
++		uci add_list firewall.@zone[1].network='wwan6'
+ 		;;
+ 	cudy,wr1000)
+ 		ucidef_add_switch "switch0" \
+@@ -221,6 +221,9 @@ ramips_setup_macs()
+ 	comfast,cf-wr617ac)
+ 		lan_mac=$(mtd_get_mac_binary factory 0xe000)
+ 		wan_mac=$(macaddr_add "$lan_mac" 1)
++                ;;
++	cudy,lt300-v3)
++		wan_mac=$(macaddr_add "$(cat /sys/class/net/eth0/address)" 1)
+                 ;;
+ 	cudy,wr1000|\
+ 	hilink,hlk-7628n|\
