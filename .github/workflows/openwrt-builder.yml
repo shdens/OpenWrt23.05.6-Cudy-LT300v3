@@ -1,7 +1,7 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 #
-# File: .github/workflows/openwrt-bulder.yml
+# File: .github/workflows/openwrt-builder.yml
 # Description: Build OpenWrt using GitHub Actions
 #
 # Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
@@ -16,8 +16,9 @@ on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/coolsnowwolf/lede
-  REPO_BRANCH: master
+  # Исправлено на официальный репозиторий OpenWrt, так как вы собираете версию 23.05.6
+  REPO_URL: https://github.com
+  REPO_BRANCH: v23.05.6
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -51,15 +52,16 @@ jobs:
 
     - name: Clone source code
       working-directory: /workdir
-run: |
+      run: |
         df -hT $PWD
-        git clone $REPO_URL -b v23.05.6 openwrt
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-    - name: Inject Custom DTS Patch
+    - name: Apply Custom Device Patch
       run: |
-        # Копируем ваш патч в директорию патчей ядра ramips для OpenWrt 23.05.6
-        cp $GITHUB_WORKSPACE/patches/999-fixed2.patch $GITHUB_WORKSPACE/openwrt/target/linux/ramips/patches-5.15/
+        # Исправлено: запуск утилиты patch для корректного создания новых dts файлов в исходниках
+        cd openwrt
+        patch -p1 < $GITHUB_WORKSPACE/patches/999-fixed2.patch
 
     - name: Load custom feeds
       run: |
@@ -135,7 +137,6 @@ run: |
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
-        [ ${UPLOAD_GOFILE} = true && ${{ steps.gofile.outputs.url }} ] && echo "🔗 [GoFile](${{ steps.gofile.outputs.url }})" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
