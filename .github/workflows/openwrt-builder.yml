@@ -52,10 +52,15 @@ jobs:
 
     - name: Clone source code
       working-directory: /workdir
-      run: |
+run: |
         df -hT $PWD
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        git clone $REPO_URL -b v23.05.6 openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Inject Custom DTS Patch
+      run: |
+        # Копируем ваш патч в директорию патчей ядра ramips для OpenWrt 23.05.6
+        cp $GITHUB_WORKSPACE/patches/999-fixed2.patch $GITHUB_WORKSPACE/openwrt/target/linux/ramips/patches-5.15/
 
     - name: Load custom feeds
       run: |
