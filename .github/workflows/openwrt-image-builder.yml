@@ -35,11 +35,19 @@ jobs:
         sed -n '/--- \/dev\/null/,/--- a\/target/p' 999-fixed2.patch | sed '1,2d' | sed '$d' > target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
         cp target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
 
-        # 2. Полностью переписываем блок метаданных Альфы в mt76x8.mk на параметры Cudy
-        # Строка SUPPORTED_DEVICES принудительно зашьет в ядро ID cudy,lt300-v3
-        cat << 'EOF' > tmp_block
-        define Device/alfa-network_awusfree1
-          $(Device/cc7628an)
+        # 2. Безопасная перезапись блока метаданных Альфы на параметры Cudy через встроенный Python
+        python3 -c "
+        path = 'target/linux/ramips/image/mt76x8.mk'
+        with open(path, 'r') as f:
+            content = f.read()
+        
+        start_idx = content.find('define Device/alfa-network_awusfree1')
+        end_str = 'endef\nTARGET_DEVICES += alfa-network_awusfree1'
+        end_idx = content.find(end_str) + len(end_str)
+        
+        if start_idx != -1 and end_idx != -1:
+            cudy_block = '''define Device/alfa-network_awusfree1
+          \$(Device/cc7628an)
           IMAGE_SIZE := 15872k
           DEVICE_VENDOR := Cudy
           DEVICE_MODEL := LT300
@@ -47,15 +55,16 @@ jobs:
           SUPPORTED_DEVICES := cudy,lt300-v3
           DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option
         endef
-        EOF
-        sed -i '/define Device\/alfa-network_awusfree1/,/endef/ { /endef/ r tmp_block' -e 'd }' target/linux/ramips/image/mt76x8.mk
+        TARGET_DEVICES += alfa-network_awusfree1'''
+            new_content = content[:start_idx] + cudy_block + content[end_idx:]
+            with open(path, 'w') as f:
+                f.write(new_content)
+            print('Блок профиля успешно заменен на Cudy')
+        else:
+            print('Ошибка: блок профиля не найден в mt76x8.mk')
+        "
 
-        # 3. Подменяем ID устройства в скрытой базе данных профилей самого Image Builder (убираем ложную проверку)
-        if [ -f tmp/.targetinfo ]; then
-          sed -i 's/Target-Profile-Name: ALFA Network AWUSFREE1/Target-Profile-Name: Cudy LT300 v3/g' tmp/.targetinfo
-        fi
-
-        # 4. Инжектируем конфигурацию сети и светодиодов в скрипты инициализации uci-defaults
+        # 3. Инжектируем конфигурацию сети и светодиодов в скрипты инициализации uci-defaults
         mkdir -p files/etc/uci-defaults
         cat << 'EOF' > files/etc/uci-defaults/99-custom-settings
         #!/bin/sh
@@ -72,11 +81,11 @@ jobs:
     - name: Compile with Official Kernel
       run: |
         cd imagebuilder
-        # Собираем легальный профиль, метаданные которого мы полностью подменили изнутри
+        # Собираем официальный легальный профиль, метаданные которого мы полностью подменили изнутри
         make image PROFILE="alfa-network_awusfree1" PACKAGES="uhttpd uhttpd-mod-ubus luci" FILES="files"
 
     - name: Upload firmware to Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: OpenWrt_23.05.6_Cudy_LT300v3_Final
+        name: OpenWrt_23.05.6_Cudy_LT300v3_FixedID
         path: imagebuilder/bin/targets/ramips/mt76x8/*
