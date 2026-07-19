@@ -34,19 +34,22 @@ jobs:
         cp $GITHUB_WORKSPACE/patches/999-fixed2.patch ./
         sed -n '/--- \/dev\/null/,/--- a\/target/p' 999-fixed2.patch | sed '1,2d' | sed '$d' > target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
 
-        # 2. Принудительно заменяем DTS файл дефолтной платы "Generic" на ваш DTS от Cudy LT300 v3.
-        # Это заставит Image Builder собрать прошивку по вашей схеме, используя профиль Generic.
-        cp target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts target/linux/ramips/dts/mt7628an.dts
+        # 2. Дописываем описание профиля Cudy LT300 v3 в сборочный файл Makefile/mk конструктора
+        # Мы вставляем блок сразу после первого совпадения устройства cudy_tr1200
+        sed -i '/define Device\/cudy_tr1200-v1/i \\ndefine Device\/cudy_lt300-v3\n  $(Device\/cc7628an)\n  IMAGE_SIZE := 15872k\n  DEVICE_VENDOR := Cudy\n  DEVICE_MODEL := LT300\n  DEVICE_VARIANT := v3\n  DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option\nendef\nTARGET_DEVICES += cudy_lt300-v3\n' target/linux/ramips/image/mt76x8.mk
 
-        # 3. Инжектируем конфигурацию сети и светодиодов в базовые файлы платформы
-        echo -e "\ncudy,lt300-v3)\n\tucidef_set_led_netdev \"internet\" \"internet\" \"white:status\" \"usb0\"\n\t;;\n" >> target/linux/ramips/mt76x8/base-files/etc/board.d/01_leds
-        echo -e "\ncudy,lt300-v3)\n\t\tucidef_add_switch \"switch0\" \"0:wan\" \"1:lan\" \"6@eth0\"\n\t\tucidef_set_interface \"wwan\" device \"usb0\" protocol \"dhcp\"\n\t\tuci add_list firewall.@zone[1].network='wwan'\n\t\tuci add_list firewall.@zone[1].network='wwan6'\n\t\t;;\n" >> target/linux/ramips/mt76x8/base-files/etc/board.d/02_network
+        # 3. Инжектируем конфигурацию сети и светодиодов в скрипты инициализации
+        sed -i '/cudy,tr1200-v1)/i \\tcudy,lt300-v3)\n\t\tucidef_set_led_netdev "internet" "internet" "white:status" "usb0"\n\t\t;;\n' target/linux/ramips/mt76x8/base-files/etc/board.d/01_leds
+        sed -i '/cudy,tr1200-v1)/i \\tcudy,lt300-v3)\n\t\tucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"\n\t\tucidef_set_interface "wwan" device "usb0" protocol "dhcp"\n\t\tuci add_list firewall.@zone[1].network='\''wwan'\''\n\t\tuci add_list firewall.@zone[1].network='\''wwan6'\''\n\t\t;;\n' target/linux/ramips/mt76x8/base-files/etc/board.d/02_network
+        
+        # 4. Обновляем кэш профилей Image Builder, чтобы он увидел новое устройство в списке
+        make .profiles
 
     - name: Compile with Official Kernel
       run: |
         cd imagebuilder
-        # Собираем стандартный Generic профиль чипа mt76x8, который теперь содержит ваш DTS и kmod-модули
-        make image PROFILE="Generic" PACKAGES="kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option uhttpd uhttpd-mod-ubus luci"
+        # Теперь профиль cudy_lt300-v3 официально зарегистрирован внутри Image Builder
+        make image PROFILE="cudy_lt300-v3" PACKAGES="kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option uhttpd uhttpd-mod-ubus luci"
 
     - name: Upload firmware to Artifacts
       uses: actions/upload-artifact@v4
