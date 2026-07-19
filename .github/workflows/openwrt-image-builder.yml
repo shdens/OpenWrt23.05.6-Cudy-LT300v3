@@ -25,27 +25,26 @@ jobs:
         ls -l
         tar -xf openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz
         mv openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64 imagebuilder
-
     - name: Inject Custom Settings via Files
       run: |
         cd imagebuilder
         
-        # 1. Извлекаем DTS из вашего патча и подменяем им базовый dts профиля generic
+        # 1. Извлекаем чистый DTS из вашего патча и подменяем им базовый dts профиля Default (mt7628an)
         cp $GITHUB_WORKSPACE/patches/999-fixed2.patch ./
         sed -n '/--- \/dev\/null/,/--- a\/target/p' 999-fixed2.patch | sed '1,2d' | sed '$d' > target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
         cp target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts target/linux/ramips/dts/mt7628an.dts
 
-        # 2. Создаем структуру папок для переопределения конфигурации сети роутера
+        # 2. Создаем структуру папок для автоматической настройки конфигурации при старте роутера
         mkdir -p files/etc/uci-defaults
         
         # 3. Пишем uci-defaults скрипт, который настроит сеть и диоды при первой загрузке роутера
         cat << 'EOF' > files/etc/uci-defaults/99-custom-settings
         #!/bin/sh
         
-        # Светодиоды
+        # Индикация
         ucidef_set_led_netdev "internet" "internet" "white:status" "usb0"
         
-        # Сеть
+        # Сетевые интерфейсы и правила коммутатора для Cudy LT300 v3
         ucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"
         ucidef_set_interface "wwan" device "usb0" protocol "dhcp"
         uci add_list firewall.@zone[1].network='wwan'
@@ -59,8 +58,8 @@ jobs:
     - name: Compile with Official Kernel
       run: |
         cd imagebuilder
-        # Собираем официальный профиль generic. Настройки сети и ваш DTS применятся автоматически.
-        make image PROFILE="generic" PACKAGES="kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option uhttpd uhttpd-mod-ubus luci luci-proto-3g" FILES="files"
+        # Запускаем сборку официального профиля "Default". Он подхватит измененный dts и кастомный скрипт files
+        make image PROFILE="Default" PACKAGES="kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option uhttpd uhttpd-mod-ubus luci luci-proto-3g" FILES="files"
 
     - name: Upload firmware to Artifacts
       uses: actions/upload-artifact@v4
