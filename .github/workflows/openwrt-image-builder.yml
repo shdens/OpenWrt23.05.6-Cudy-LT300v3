@@ -26,55 +26,31 @@ jobs:
         tar -xf openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz
         mv openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64 imagebuilder
 
-    - name: Hard Rewrite Alfa to Cudy ID
+    - name: Inject Custom Settings
       run: |
         cd imagebuilder
         
-        # 1. Извлекаем чистый DTS из вашего патча
+        # 1. Извлекаем DTS из вашего патча
         cp $GITHUB_WORKSPACE/patches/999-fixed2.patch ./
         sed -n '/--- \/dev\/null/,/--- a\/target/p' 999-fixed2.patch | sed '1,2d' | sed '$d' > target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
         
-        # 2. ЖЕСТКО перезаписываем DTS-файл Альфы вашим DTS от Cudy.
-        cp target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
-
-        # 3. Полное переопределение профиля в mt76x8.mk через Python.
-        # Изменяем DEVICE_MODEL и DEVICE_VARIANT, чтобы утилита patch-dtb вшила правильное имя в Open Firmware (OF).
-        python3 -c "
-        path = 'target/linux/ramips/image/mt76x8.mk'
-        with open(path, 'r') as f:
-            content = f.read()
+        # 2. Исправляем баг синтаксиса "Bad cell count" (в 23.05 блоку nvmem-layout требуется nvmem-cells-group)
+        sed -i 's/compatible = "fixed-layout";/compatible = "fixed-layout";\n\t\t\t\t\t#address-cells = <1>;\n\t\t\t\t\t#size-cells = <1>;/g' target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
         
-        start_idx = content.find('define Device/alfa-network_awusfree1')
-        end_str = 'endef\nTARGET_DEVICES += alfa-network_awusfree1'
-        end_idx = content.find(end_str) + len(end_str)
-        
-        if start_idx != -1 and end_idx != -1:
-            cudy_block = '''define Device/alfa-network_awusfree1
-          \$(Device/cc7628an)
-          IMAGE_SIZE := 15872k
-          DEVICE_VENDOR := Cudy
-          DEVICE_MODEL := LT300
-          DEVICE_VARIANT := v3
-          SUPPORTED_DEVICES := cudy,lt300-v3
-          DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option kmod-usb-net-cdc-ether usb-modeswitch
-        endef
-        TARGET_DEVICES += alfa-network_awusfree1'''
-            new_content = content[:start_idx] + cudy_block + content[end_idx:]
-            with open(path, 'w') as f:
-                f.write(new_content)
-            print('OF-метаданные успешно обновлены')
-        else:
-            print('Ошибка: профиль не найден')
-        "
+        # 3. Жестко подменяем DTS файл родственного 16MB устройства wr1000
+        cp target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts target/linux/ramips/dts/mt7628an_cudy_wr1000.dts
 
-        # 4. Добавляем uci-defaults для автоматического поднятия модема
+        # 4. Модифицируем метаданные wr1000, вшивая в ядро имя Cudy LT300 v3 и пакеты сотовой связи
+        sed -i 's/DEVICE_MODEL := WR1000/DEVICE_MODEL := LT300 v3 (Modified)/g' target/linux/ramips/image/mt76x8.mk
+        sed -i '/Device\/cudy_wr1000/,/endef/ { /DEVICE_PACKAGES :=/c\  DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-cdc-ether kmod-usb-net-rndis kmod-usb-serial-option usb-modeswitch' target/linux/ramips/image/mt76x8.mk
+
+        # 5. Скрипт uci-defaults для автоматической конфигурации сети при старте
         mkdir -p files/etc/uci-defaults
         cat << 'EOF' > files/etc/uci-defaults/99-custom-settings
         #!/bin/sh
-        # Фикс отображения в LuCI, если ядро берет старую строку из bootloader
         echo "Cudy LT300 v3" > /tmp/sysinfo/model
         
-        # Настройка сети под MeigLink (CDC-ECM режим)
+        # Инициализация LAN/WAN портов и сотового интерфейса usb0
         ucidef_set_led_netdev "internet" "internet" "white:status" "usb0"
         ucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"
         
@@ -82,7 +58,7 @@ jobs:
         uci set network.wwan=interface
         uci set network.wwan.proto='dhcp'
         uci set network.wwan.device='usb0'
-        uci add_list firewall.@zone[1].network='wwan'
+        uci add_list firewall.@zone.network='wwan'
         
         uci commit
         exit 0
@@ -92,11 +68,11 @@ jobs:
     - name: Compile with Official Kernel
       run: |
         cd imagebuilder
-        # Собираем официальный легальный профиль, метаданные которого мы полностью подменили изнутри
-        make image PROFILE="alfa-network_awusfree1" PACKAGES="uhttpd uhttpd-mod-ubus luci" FILES="files"
+        # Собираем прошивку на базе профиля cudy_wr1000
+        make image PROFILE="cudy_wr1000" PACKAGES="uhttpd uhttpd-mod-ubus luci" FILES="files"
 
     - name: Upload firmware to Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: OpenWrt_23.05.6_Cudy_LT300v3_FixedID
+        name: OpenWrt_23.05.6_Cudy_LT300v3_Fixed_MTD
         path: imagebuilder/bin/targets/ramips/mt76x8/*
