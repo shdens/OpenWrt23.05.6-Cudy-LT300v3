@@ -25,31 +25,28 @@ jobs:
         ls -l
         tar -xf openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz
         mv openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64 imagebuilder
-    - name: Inject Custom Settings via Files
+
+    - name: Inject Custom Profile Settings
       run: |
         cd imagebuilder
         
-        # 1. Извлекаем чистый DTS из вашего патча и подменяем им базовый dts профиля Default (mt7628an)
+        # 1. Извлекаем чистый DTS из вашего патча
         cp $GITHUB_WORKSPACE/patches/999-fixed2.patch ./
         sed -n '/--- \/dev\/null/,/--- a\/target/p' 999-fixed2.patch | sed '1,2d' | sed '$d' > target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
-        cp target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts target/linux/ramips/dts/mt7628an.dts
 
-        # 2. Создаем структуру папок для автоматической настройки конфигурации при старте роутера
+        # 2. Модифицируем файл mt76x8.mk конструктора. 
+        # Дописываем профиль Cudy LT300 v3 прямо в код
+        echo -e '\ndefine Device/cudy_lt300-v3\n  $(Device/cc7628an)\n  IMAGE_SIZE := 15872k\n  DEVICE_VENDOR := Cudy\n  DEVICE_MODEL := LT300\n  DEVICE_VARIANT := v3\n  DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option\nendef\nTARGET_DEVICES += cudy_lt300-v3' >> target/linux/ramips/image/mt76x8.mk
+
+        # 3. Инжектируем конфигурацию сети и светодиодов в скрипты инициализации
         mkdir -p files/etc/uci-defaults
-        
-        # 3. Пишем uci-defaults скрипт, который настроит сеть и диоды при первой загрузке роутера
         cat << 'EOF' > files/etc/uci-defaults/99-custom-settings
         #!/bin/sh
-        
-        # Индикация
         ucidef_set_led_netdev "internet" "internet" "white:status" "usb0"
-        
-        # Сетевые интерфейсы и правила коммутатора для Cudy LT300 v3
         ucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"
         ucidef_set_interface "wwan" device "usb0" protocol "dhcp"
-        uci add_list firewall.@zone[1].network='wwan'
-        uci add_list firewall.@zone[1].network='wwan6'
-        
+        uci add_list firewall.@zone.network='wwan'
+        uci add_list firewall.@zone.network='wwan6'
         uci commit
         exit 0
         EOF
@@ -58,8 +55,8 @@ jobs:
     - name: Compile with Official Kernel
       run: |
         cd imagebuilder
-        # Запускаем сборку официального профиля "Default". Он подхватит измененный dts и кастомный скрипт files
-        make image PROFILE="Default" PACKAGES="kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option uhttpd uhttpd-mod-ubus luci luci-proto-3g" FILES="files"
+        # Вызываем сборку напрямую через переменную TARGET_DEVICES, минуя PROFILE ограничения
+        make image TARGET_DEVICES="cudy_lt300-v3" PACKAGES="kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option uhttpd uhttpd-mod-ubus luci" FILES="files"
 
     - name: Upload firmware to Artifacts
       uses: actions/upload-artifact@v4
