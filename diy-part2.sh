@@ -1,20 +1,10 @@
 #!/bin/bash
-#
-# https://github.com/P3TERX/Actions-OpenWrt
-# File name: diy-part2.sh
-# Description: OpenWrt DIY script part 2 (After Update feeds)
-#
-# Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
-#
-# This is free software, licensed under the MIT License.
-# See /LICENSE for more information.
-#
+# Принудительно задаем целевую платформу MediaTek MT76x8
+echo 'CONFIG_TARGET_ramips=y' >> .config
+echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
 
-# Modify default IP
-#sed -i 's/192.168.1.1/192.168.50.5/g' package/base-files/files/bin/config_generate
+# Жестко прописываем сборку только для вашего Cudy LT300 v3 из патча
+echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_cudy_lt300-v3=y' >> .config
 
-# Modify default theme
-#sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
-
-# Modify hostname
-#sed -i 's/OpenWrt/P3TERX-Router/g' package/base-files/files/bin/config_generate
+# Отключаем генерацию образов для всех остальных устройств платформы
+echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
