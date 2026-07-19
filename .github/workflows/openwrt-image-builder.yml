@@ -1,4 +1,4 @@
-name: Image Builder
+name: OpenWrt Image Builder
 
 on:
   workflow_dispatch:
@@ -14,21 +14,15 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        # Добавлен пакет zstd для распаковки нового формата архивов OpenWrt
-        sudo apt-get install -y build-essential libncurses5-dev libssl-dev gawk git texinfo zlib1g-dev patch unzip wget time zstd
+        sudo apt-get install -y build-essential libncurses5-dev libssl-dev gawk git texinfo zlib1g-dev patch unzip wget time
 
-   - name: Download Official Image Builder
+    - name: Download Official Image Builder
       run: |
-        # Задаем прямую ссылку на конструктор
-        URL="https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/"
-        
+        URL="https://openwrt.org"
         echo "Скачиваем Image Builder..."
         wget -O imagebuilder.tar.xz "$URL"
-        
         echo "Распаковываем архив..."
         tar -xf imagebuilder.tar.xz
-        
-        # Переименовываем распакованную папку в 'imagebuilder'
         mv openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64 imagebuilder
 
     - name: Inject Custom Profile Settings
@@ -40,7 +34,6 @@ jobs:
 
         # 2. Добавляем поддержку DTS
         cp $GITHUB_WORKSPACE/patches/999-fixed2.patch ./
-        # Вырезаем из патча только блок DTS и создаем файл
         sed -n '/--- \/dev\/null/,/--- a\/target/p' 999-fixed2.patch | sed '1,2d' | sed '$d' > target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
 
         # 3. Накладываем сетевые настройки и светодиоды
@@ -51,7 +44,7 @@ jobs:
     - name: Compile with Official Kernel
       run: |
         cd imagebuilder
-        # Запускаем сборку конкретно под ваш профиль с пакетами для модема
+        # Запускаем финальную сборку образа
         make image PROFILE="cudy_lt300-v3" PACKAGES="kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option"
 
     - name: Upload firmware to Artifacts
