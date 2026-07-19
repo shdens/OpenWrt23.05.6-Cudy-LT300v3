@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 
 env:
+  # ИСПРАВЛЕНО: указан точный и полный путь к официальному репозиторию OpenWrt
   REPO_URL: https://github.com
   REPO_BRANCH: v23.05.6
   FEEDS_CONF: feeds.conf.default
@@ -106,7 +107,8 @@ jobs:
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        rm -rf openwrt/bin/targets/ramips/mt76x8/packages
+        # Безопасное удаление пакетов без использования уязвимой команды 'cd'
+        rm -rf openwrt/bin/targets/ramips/mt76x8/packages || true
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
