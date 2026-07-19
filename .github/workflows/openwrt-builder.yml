@@ -106,17 +106,15 @@ jobs:
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        cd openwrt/bin/targets/ramips/mt76x8
-        rm -rf packages
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        rm -rf openwrt/bin/targets/ramips/mt76x8/packages
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: ${{ env.FIRMWARE }}
+        name: OpenWrt_firmware
+        path: openwrt/bin/targets/ramips/mt76x8/
 
     - name: Generate release tag
       id: tag
@@ -134,7 +132,9 @@ jobs:
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
+        files: |
+          openwrt/bin/targets/ramips/mt76x8/*.bin
+          openwrt/bin/targets/ramips/mt76x8/*.manifest
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
