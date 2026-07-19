@@ -86,7 +86,9 @@ jobs:
       id: package
       run: |
         cd openwrt
+        # Сначала генерируем базовый конфиг с учетом параметров из diy-part2.sh
         make defconfig
+        # Скачиваем исходники пакетов
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
