@@ -65,7 +65,7 @@
 +		signal2 {
 +			label = "white:signal2";
 +			color = <LED_COLOR_ID_WHITE>;
-+			gpios = <&gpio 4 Gang_ACTIVE_LOW>;
++			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
 +		};
 +
 +		signal3 {
@@ -193,18 +193,17 @@
 +};
 +--- a/target/linux/ramips/image/mt76x8.mk
 ++++ b/target/linux/ramips/image/mt76x8.mk
-+@@ -166,6 +166,17 @@
++@@ -166,6 +166,16 @@
 + endef
 + TARGET_DEVICES += cudy_tr1200-v1
 + 
 ++define Device/cudy_lt300-v3
+++  $(Device/cc7628an)
 ++  IMAGE_SIZE := 15872k
 ++  DEVICE_VENDOR := Cudy
 ++  DEVICE_MODEL := LT300
 ++  DEVICE_VARIANT := v3
-++  DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis \
-++	kmod-usb-serial-option
-++  SUPPORTED_DEVICES += R100
+++  DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option
 ++endef
 ++TARGET_DEVICES += cudy_lt300-v3
 ++
