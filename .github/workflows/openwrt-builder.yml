@@ -6,7 +6,7 @@ on:
 
 env:
   # ИСПРАВЛЕНО: указан точный и полный путь к официальному репозиторию OpenWrt
-  REPO_URL: https://github.com
+  REPO_URL: https://github.com/openwrt/
   REPO_BRANCH: v23.05.6
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
