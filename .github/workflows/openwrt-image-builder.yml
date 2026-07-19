@@ -18,11 +18,11 @@ jobs:
 
     - name: Download Official Image Builder
       run: |
-        URL="https://openwrt.org"
+        URL="https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/"
         echo "Скачиваем Image Builder..."
-        wget -O imagebuilder.tar.xz "$URL"
+        wget -O openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz "$URL"
         echo "Распаковываем архив..."
-        tar -xf imagebuilder.tar.xz
+        tar -xf openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz
         mv openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64 imagebuilder
 
     - name: Inject Custom Profile Settings
