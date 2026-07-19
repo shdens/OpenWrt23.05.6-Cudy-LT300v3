@@ -20,7 +20,7 @@ jobs:
    - name: Download Official Image Builder
       run: |
         # Задаем прямую ссылку на конструктор
-        URL="https://openwrt.org"
+        URL="https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/"
         
         echo "Скачиваем Image Builder..."
         wget -O imagebuilder.tar.xz "$URL"
