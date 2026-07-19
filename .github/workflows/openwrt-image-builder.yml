@@ -20,7 +20,7 @@ jobs:
       run: |
         URL="https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz"
         echo "Скачиваем Image Builder..."
-        wget -O "$URL"
+        wget "$URL"
         echo "Распаковываем архив..."
         ls -l
         tar -xf openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz
