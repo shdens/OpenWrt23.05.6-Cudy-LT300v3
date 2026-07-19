@@ -17,13 +17,18 @@ jobs:
         # Добавлен пакет zstd для распаковки нового формата архивов OpenWrt
         sudo apt-get install -y build-essential libncurses5-dev libssl-dev gawk git texinfo zlib1g-dev patch unzip wget time zstd
 
-    - name: Download Official Image Builder
+   - name: Download Official Image Builder
       run: |
-        # Скачиваем корректный актуальный файл в формате .tar.zst
-        wget https://openwrt.org
+        # Задаем прямую ссылку на конструктор
+        URL="https://openwrt.org"
         
-        # Распаковываем архив .tar.zst
-        tar -xf openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.zst
+        echo "Скачиваем Image Builder..."
+        wget -O imagebuilder.tar.xz "$URL"
+        
+        echo "Распаковываем архив..."
+        tar -xf imagebuilder.tar.xz
+        
+        # Переименовываем распакованную папку в 'imagebuilder'
         mv openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64 imagebuilder
 
     - name: Inject Custom Profile Settings
