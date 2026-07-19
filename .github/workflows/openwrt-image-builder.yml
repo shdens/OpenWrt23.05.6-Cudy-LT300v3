@@ -30,30 +30,55 @@ jobs:
       run: |
         cd imagebuilder
         
-        # 1. Извлекаем DTS из вашего патча
+        # 1. Извлекаем чистый DTS из вашего патча
         cp $GITHUB_WORKSPACE/patches/999-fixed2.patch ./
         sed -n '/--- \/dev\/null/,/--- a\/target/p' 999-fixed2.patch | sed '1,2d' | sed '$d' > target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
         
-        # 2. Исправляем баг синтаксиса "Bad cell count" (в 23.05 блоку nvmem-layout требуется nvmem-cells-group)
+        # 2. Исправляем баг синтаксиса "Bad cell count" (добавляем ячейки адресации nvmem-layout)
         sed -i 's/compatible = "fixed-layout";/compatible = "fixed-layout";\n\t\t\t\t\t#address-cells = <1>;\n\t\t\t\t\t#size-cells = <1>;/g' target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
         
         # 3. Жестко подменяем DTS файл родственного 16MB устройства wr1000
         cp target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts target/linux/ramips/dts/mt7628an_cudy_wr1000.dts
 
-        # 4. Модифицируем метаданные wr1000, вшивая в ядро имя Cudy LT300 v3 и пакеты сотовой связи
-        sed -i 's/DEVICE_MODEL := WR1000/DEVICE_MODEL := LT300 v3 (Modified)/g' target/linux/ramips/image/mt76x8.mk
-        sed -i '/Device\/cudy_wr1000/,/endef/ { /DEVICE_PACKAGES :=/c\  DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-cdc-ether kmod-usb-net-rndis kmod-usb-serial-option usb-modeswitch' target/linux/ramips/image/mt76x8.mk
+        # 4. Безопасная перезапись пакетов и метаданных wr1000 на параметры Cudy через Python
+        python3 -c "
+        path = 'target/linux/ramips/image/mt76x8.mk'
+        with open(path, 'r') as f:
+            content = f.read()
+        
+        start_idx = content.find('define Device/cudy_wr1000')
+        end_str = 'endef\nTARGET_DEVICES += cudy_wr1000'
+        end_idx = content.find(end_str) + len(end_str)
+        
+        if start_idx != -1 and end_idx != -1:
+            cudy_block = '''define Device/cudy_wr1000
+          IMAGE_SIZE := 15872k
+          IMAGES += factory.bin
+          DEVICE_VENDOR := Cudy
+          DEVICE_MODEL := LT300
+          DEVICE_VARIANT := v3 (23.05.6 Mod)
+          DEVICE_PACKAGES := kmod-usb2 kmod-usb-ohci kmod-usb-net-cdc-ether kmod-usb-net-rndis kmod-usb-serial-option usb-modeswitch
+        endef
+        TARGET_DEVICES += cudy_wr1000'''
+            new_content = content[:start_idx] + cudy_block + content[end_idx:]
+            with open(path, 'w') as f:
+                f.write(new_content)
+            print('Блок профиля успешно пропатчен!')
+        else:
+            print('Ошибка: блок профиля cudy_wr1000 не найден')
+        "
 
-        # 5. Скрипт uci-defaults для автоматической конфигурации сети при старте
+        # 5. Скрипт uci-defaults для автоматической конфигурации сети и подмены имени
         mkdir -p files/etc/uci-defaults
         cat << 'EOF' > files/etc/uci-defaults/99-custom-settings
         #!/bin/sh
         echo "Cudy LT300 v3" > /tmp/sysinfo/model
         
-        # Инициализация LAN/WAN портов и сотового интерфейса usb0
+        # Индикация и порты
         ucidef_set_led_netdev "internet" "internet" "white:status" "usb0"
         ucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"
         
+        # Настройка модема MeigLink (CDC-ECM/RNDIS)
         uci delete network.wwan 2>/dev/null
         uci set network.wwan=interface
         uci set network.wwan.proto='dhcp'
@@ -68,7 +93,7 @@ jobs:
     - name: Compile with Official Kernel
       run: |
         cd imagebuilder
-        # Собираем прошивку на базе профиля cudy_wr1000
+        # Собираем официальный профиль cudy_wr1000, который мы перенастроили изнутри
         make image PROFILE="cudy_wr1000" PACKAGES="uhttpd uhttpd-mod-ubus luci" FILES="files"
 
     - name: Upload firmware to Artifacts
