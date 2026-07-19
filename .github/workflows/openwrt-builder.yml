@@ -53,6 +53,8 @@ jobs:
       working-directory: /workdir
       run: |
         df -hT $PWD
+        # Принудительно удаляем старую папку openwrt, если она осталась от прошлых сборок
+        rm -rf openwrt
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
