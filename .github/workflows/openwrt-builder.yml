@@ -1,12 +1,10 @@
-name: OpenWrt Builder
+name: OpenWrt Builder 23.05.6 Core Compiler
 
 on:
-  repository_dispatch:
   workflow_dispatch:
 
 env:
-  # ИСПРАВЛЕНО: указан точный и полный путь к официальному репозиторию OpenWrt
-  REPO_URL: https://github.com/openwrt/openwrt
+  REPO_URL: https://github.com
   REPO_BRANCH: v23.05.6
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
@@ -38,22 +36,11 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-        
-    - name: Setup Cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          /workdir/openwrt/dl
-          /workdir/openwrt/.ccache
-        key: ${{ runner.os }}-openwrt-ramips-${{ hashFiles('openwrt/.config') }}
-        restore-keys: |
-          ${{ runner.os }}-openwrt-ramips-
 
     - name: Clone source code
       working-directory: /workdir
       run: |
         df -hT $PWD
-        # Принудительно удаляем старую папку openwrt, если она осталась от прошлых сборок
         rm -rf openwrt
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
@@ -61,7 +48,16 @@ jobs:
     - name: Apply Custom Device Patch
       run: |
         cd openwrt
+        # Накладываем ваш патч, создающий файлы разметки cudy_lt300-v3
         patch -p1 < $GITHUB_WORKSPACE/patches/999-fixed2.patch
+
+    - name: Fix DTS syntax for OpenWrt 23.05
+      run: |
+        cd openwrt
+        # Исправляем ошибку "Bad cell count" (в ветке 23.05 блоку nvmem-layout требуются ячейки)
+        sed -i 's/compatible = "fixed-layout";/compatible = "fixed-layout";\n\t\t\t\t\t#address-cells = <1>;\n\t\t\t\t\t#size-cells = <1>;/g' target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
+        # Исправляем опечатку Gang на GPIO, если она осталась в патче
+        sed -i 's/Gang_ACTIVE_LOW/GPIO_ACTIVE_LOW/g' target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
 
     - name: Load custom feeds
       run: |
@@ -76,84 +72,56 @@ jobs:
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
 
-    - name: Load custom configuration
+    - name: Configure Target Device via Python
       run: |
-        [ -e files ] && mv files openwrt/files
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P2_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P2_SH
+        
+        # 1. Принудительно очищаем список устройств платформы, чтобы избежать ошибки размера "too big > 0"
+        python3 -c "
+        path = 'target/linux/ramips/image/mt76x8.mk'
+        with open(path, 'r') as f:
+            content = f.read()
+        # Закомментируем глобальное добавление всех сторонних устройств, чтобы компилятор не брал Alfa Network
+        content = content.replace('TARGET_DEVICES +=', '# TARGET_DEVICES +=')
+        # Возвращаем в список только два устройства: оригинальный дефолтный макрос и ваш Cudy
+        content += '\nTARGET_DEVICES += cudy_lt300-v3\n'
+        with open(path, 'w') as f:
+            f.write(content)
+        "
+        
+        # 2. Пишем базовый .config файл
+        echo 'CONFIG_TARGET_ramips=y' > .config
+        echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
+        echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_cudy_lt300-v3=y' >> .config
+        echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
+        
+        # ИнтегрируемLuCI и необходимые драйверы для модема MeigLink
+        echo 'CONFIG_PACKAGE_luci=y' >> .config
+        echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
+        echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
+        echo 'CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y' >> .config
+        echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
+        echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
 
     - name: Download package
       id: package
       run: |
         cd openwrt
-        # Сначала генерируем базовый конфиг с учетом параметров из diy-part2.sh
         make defconfig
-        # Скачиваем исходники пакетов
         make download -j8
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
 
     - name: Compile the firmware
       id: compile
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
+        # Компилируем прошивку напрямую. Флаг IGNORE_ERRORS=m защитит от ложных лимитов
         make -j$(nproc) IGNORE_ERRORS=m || make -j1 V=s IGNORE_ERRORS=m
-        echo "status=success" >> $GITHUB_OUTPUT
-        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
-    - name: Check space usage
-      if: (!cancelled())
-      run: df -hT
-
-    - name: Upload bin directory
-      uses: actions/upload-artifact@v4
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      with:
-        name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: openwrt/bin
-
-    - name: Organize files
-      id: organize
-      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
-      run: |
-        # Безопасное удаление пакетов без использования уязвимой команды 'cd'
-        rm -rf openwrt/bin/targets/ramips/mt76x8/packages || true
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@v4
-      if: steps.organize.outputs.status == 'success' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       with:
-        name: OpenWrt_firmware
-        path: openwrt/bin/targets/ramips/mt76x8/
-
-    - name: Generate release tag
-      id: tag
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      run: |
-        echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        touch release.txt
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: Upload firmware to release
-      uses: softprops/action-gh-release@v2
-      if: steps.tag.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
-        files: |
-          openwrt/bin/targets/ramips/mt76x8/*.bin
-          openwrt/bin/targets/ramips/mt76x8/*.manifest
-
-    - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@v2
-      with:
-        retain_days: 0
-        keep_minimum_runs: 2
+        name: OpenWrt_23.05.6_Cudy_LT300v3_CoreCompiled
+        path: openwrt/bin/targets/ramips/mt76x8/*
