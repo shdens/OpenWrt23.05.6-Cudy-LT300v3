@@ -54,11 +54,9 @@ jobs:
     - name: Fix DTS syntax for OpenWrt 23.05
       run: |
         cd openwrt
-        # Исправляем ошибку "Bad cell count" (в ветке 23.05 блоку nvmem-layout требуются ячейки)
-        sed -i 's/compatible = "fixed-layout";/compatible = "fixed-layout";\n\t\t\t\t\t#address-cells = <1>;\n\t\t\t\t\t#size-cells = <1>;/g' target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
         # Исправляем опечатку Gang на GPIO, если она осталась в патче
         sed -i 's/Gang_ACTIVE_LOW/GPIO_ACTIVE_LOW/g' target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
-
+        
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
