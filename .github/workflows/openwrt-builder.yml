@@ -49,7 +49,7 @@ jobs:
       run: |
         cd openwrt
         
-        # Записываем DTS-код Cudy LT300 v3 поверх файла Альфы с использованием безопасного Bash-блока
+        # Записываем исправленный DTS-код Cudy LT300 v3 поверх файла Альфы
         cat << 'EOF' > target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
         // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
         
@@ -199,8 +199,10 @@ jobs:
         				label = "bdinfo";
         				reg = <0xff0000 0x10000>;
         				read-only;
-        
-        				compatible = "nvmem-cells";
+        				
+        				#address-cells = <1>;
+        				#size-cells = <1>;
+        				compatible = "fixed-partitions";
         
         				nvmem-layout {
         					compatible = "fixed-layout";
@@ -267,6 +269,7 @@ jobs:
 
         # Отключаем удаление файлов при ложной проверке 'too big > 0'
         sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
+
 
     - name: Load custom feeds
       run: |
