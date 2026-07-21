@@ -1,4 +1,4 @@
-name: OpenWrt Builder 23.05.6 Vermagic Fixed
+name: OpenWrt Builder 23.05.6 cudy gpio2
 
 on:
   workflow_dispatch:
