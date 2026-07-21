@@ -1,10 +1,10 @@
-name: OpenWrt Builder 23.05.6 Hard Patch
+name: OpenWrt Builder 23.05.6 Vermagic Fixed
 
 on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt
+  REPO_URL: https://github.com
   REPO_BRANCH: v23.05.6
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
@@ -31,8 +31,6 @@ jobs:
         sudo docker image prune --all --force
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
@@ -49,7 +47,7 @@ jobs:
       run: |
         cd openwrt
         
-        # Записываем исправленный DTS-код Cudy LT300 v3 поверх файла Альфы
+        # 1. Записываем чистый, исправленный DTS-код Cudy LT300 v3 поверх файла Альфы
         cat << 'EOF' > target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
         // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
         
@@ -245,7 +243,7 @@ jobs:
         };
         EOF
 
-        # Модифицируем mt76x8.mk под параметры Cudy через Python
+        # 2. Модифицируем mt76x8.mk под параметры Cudy через Python
         python3 -c "
         path = 'target/linux/ramips/image/mt76x8.mk'
         with open(path, 'r') as f:
@@ -267,9 +265,8 @@ jobs:
                 f.write(content)
         "
 
-        # Отключаем удаление файлов при ложной проверке 'too big > 0'
+        # 3. Отключаем удаление файлов при ложной проверке 'too big > 0'
         sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
-
 
     - name: Load custom feeds
       run: |
@@ -286,12 +283,19 @@ jobs:
     - name: Configure Target Config
       run: |
         cd openwrt
+        
+        # --- ХАК ФИКСАЦИИ ОФИЦИАЛЬНОГО VERMAGIC ---
+        echo "9606d1ef8f17bc16ff728956bb201f11" > .vermagic
+        sed -i 's/$(STAMP_KERNEL_MODIFY)/9606d1ef8f17bc16ff728956bb201f11/g' include/kernel-defaults.mk
+        sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=9606d1ef8f17bc16ff728956bb201f11/g' include/kernel.mk
+        # ------------------------------------------
+
         echo 'CONFIG_TARGET_ramips=y' > .config
         echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
         echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
         echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
         
-        # Драйверы сетевой карты и USB для модема MeigLink
+        # Системные пакеты и сотовые драйверы под MeigLink модуля ECM/RNDIS
         echo 'CONFIG_PACKAGE_luci=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
@@ -318,3 +322,4 @@ jobs:
       with:
         name: OpenWrt_23.05.6_Cudy_LT300v3_HardPatched
         path: openwrt/bin/targets/ramips/mt76x8/*
+      
