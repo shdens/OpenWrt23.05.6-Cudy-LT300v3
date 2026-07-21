@@ -1,4 +1,4 @@
-name: OpenWrt Builder 23.05.6 Cudy LT300+vermagic
+name: OpenWrt Builder 23.05.6 Vermagic Fixed
 
 on:
   workflow_dispatch:
@@ -31,8 +31,6 @@ jobs:
         sudo docker image prune --all --force
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
@@ -49,7 +47,7 @@ jobs:
       run: |
         cd openwrt
         
-        # Записываем исправленный DTS-код Cudy LT300 v3 поверх файла Альфы
+        # Записываем чистый DTS-код Cudy LT300 v3 поверх файла Альфы (Добавлен экспорт GPIO 2 для Reset)
         cat << 'EOF' > target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
         // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
         
@@ -127,11 +125,18 @@ jobs:
         
         	gpio_export {
         		compatible = "gpio-export";
-        
+
         		usb4g {
         			gpio-export,name = "4g";
         			gpio-export,output = <0>;
         			gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
+        		};
+
+        		# Добавлен аппаратный Reset сотового модуля MeigLink
+        		usb4g_reset {
+        			gpio-export,name = "4g_reset";
+        			gpio-export,output = <0>;
+        			gpios = <&gpio 2 GPIO_ACTIVE_HIGH>;
         		};
         	};
         };
@@ -270,7 +275,6 @@ jobs:
         # Отключаем удаление файлов при ложной проверке 'too big > 0'
         sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
 
-
     - name: Load custom feeds
       run: |
         chmod +x $DIY_P1_SH
@@ -287,19 +291,18 @@ jobs:
       run: |
         cd openwrt
         
-        # --- ХАК ДЛЯ ФИКСАЦИИ ОФИЦИАЛЬНОГО VERMAGIC ---
-        # Заменяем динамический хэш ядра в скриптах OpenWrt на стоковый хэш релиза 23.05.6
+        # --- ХАК ФИКСАЦИИ ОФИЦИАЛЬНОГО VERMAGIC ---
         echo "9606d1ef8f17bc16ff728956bb201f11" > .vermagic
         sed -i 's/$(STAMP_KERNEL_MODIFY)/9606d1ef8f17bc16ff728956bb201f11/g' include/kernel-defaults.mk
         sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=9606d1ef8f17bc16ff728956bb201f11/g' include/kernel.mk
-        # ----------------------------------------------
+        # ------------------------------------------
 
         echo 'CONFIG_TARGET_ramips=y' > .config
         echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
         echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
         echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
         
-        # Драйверы сетевой карты и USB для модема MeigLink
+        # Системные пакеты и сотовые драйверы под MeigLink (Протокол RNDIS)
         echo 'CONFIG_PACKAGE_luci=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
@@ -318,11 +321,3 @@ jobs:
       run: |
         cd openwrt
         make -j$(nproc) || make -j1 V=s
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: Upload firmware directory
-      uses: actions/upload-artifact@v4
-      if: steps.compile.outputs.status == 'success' && !cancelled()
-      with:
-        name: OpenWrt_23.05.6_Cudy_LT300v3_HardPatched
-        path: openwrt/bin/targets/ramips/mt76x8/*
