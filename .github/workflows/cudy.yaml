@@ -303,7 +303,7 @@ jobs:
         echo 'CONFIG_PACKAGE_luci=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y' >> .config
+        echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
         echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
 
