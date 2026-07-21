@@ -321,3 +321,11 @@ jobs:
       run: |
         cd openwrt
         make -j$(nproc) || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@v4
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      with:
+        name: OpenWrt_23.05.6_Cudy_LT300v3_HardPatched
+        path: openwrt/bin/targets/ramips/mt76x8/*
