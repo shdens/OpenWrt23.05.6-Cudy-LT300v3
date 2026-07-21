@@ -1,10 +1,10 @@
-name: OpenWrt Builder 23.05.6 Core Compiler
+name: OpenWrt Builder 23.05.6 Hard Patch
 
 on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt
+  REPO_URL: https://github.com
   REPO_BRANCH: v23.05.6
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
@@ -13,7 +13,7 @@ env:
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
-  TZ: Asia/Bangkok
+  TZ: Asia/Shanghai
 
 jobs:
   build:
@@ -45,44 +45,66 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-    - name: Apply Custom Device Patch
+    - name: Hard Patch Device Source
       run: |
         cd openwrt
-        patch -p1 < $GITHUB_WORKSPACE/patches/999-fixed2.patch
+        
+        # 1. Извлекаем DTS из вашего патча, исправляем опечатку Gang на GPIO
+        cp $GITHUB_WORKSPACE/patches/999-fixed2.patch ./
+        sed -n '/--- \/dev\/null/,/--- a\/target/p' 999-fixed2.patch | sed '1,2d' | sed '$d' > my_cudy.dts
+        sed -i 's/Gang_ACTIVE_LOW/GPIO_ACTIVE_LOW/g' my_cudy.dts
 
-    - name: Fix DTS syntax for OpenWrt 23.05
-      run: |
-        cd openwrt
-        sed -i 's/Gang_ACTIVE_LOW/GPIO_ACTIVE_LOW/g' target/linux/ramips/dts/mt7628an_cudy_lt300-v3.dts
+        # 2. ЖЕСТКАЯ ПОДМЕНА: Уничтожаем DTS Альфы и записываем туда ваш DTS от Cudy LT300 v3
+        cp my_cudy.dts target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
+
+        # 3. Переписываем текстовые метаданные в mt76x8.mk, чтобы изменить имя и размеры прошивки для Альфы
+        python3 -c "
+        path = 'target/linux/ramips/image/mt76x8.mk'
+        with open(path, 'r') as f:
+            content = f.read()
+        start = content.find('define Device/alfa-network_awusfree1')
+        end = content.find('endef\nTARGET_DEVICES += alfa-network_awusfree1') + len('endef\nTARGET_DEVICES += alfa-network_awusfree1')
+        if start != -1 and end != -1:
+            new_block = '''define Device/alfa-network_awusfree1
+          \$(Device/cc7628an)
+          IMAGE_SIZE := 15872k
+          DEVICE_VENDOR := Cudy
+          DEVICE_MODEL := LT300
+          DEVICE_VARIANT := v3
+          SUPPORTED_DEVICES := cudy,lt300-v3
+        endef
+        TARGET_DEVICES += alfa-network_awusfree1'''
+            content = content[:start] + new_block + content[end:]
+            with open(path, 'w') as f:
+                f.write(content)
+        "
+
+        # 4. Отключаем удаление файлов при ложной проверке 'too big > 0'
+        sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
 
     - name: Load custom feeds
       run: |
-        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
-    - name: Update feeds
-      run: cd openwrt && ./scripts/feeds update -a
+    - name: Update and Install feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
 
-    - name: Install feeds
-      run: cd openwrt && ./scripts/feeds install -a
-
-    - name: Configure Target Device
+    - name: Configure Target Config
       run: |
         cd openwrt
         
-        # 1. ЖЕСТКИЙ ХАК: Полностью отключаем удаление файлов при ложной проверке 'too big'
-        # Заменяем команду удаления файла "rm -f $@" на безопасное эхо, чтобы sysupgrade.bin сохранился
-        sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
-        
-        # 2. Пишем конфигурационный файл .config под ваше устройство
+        # Задаем сборку профиля Альфы, метаданные и DTS которого мы полностью заменили на Cudy
         echo 'CONFIG_TARGET_ramips=y' > .config
         echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
-        echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_cudy_lt300-v3=y' >> .config
+        echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
         echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
         
-        # Драйверы для 4G-модема MeigLink
+        # Драйверы сетевой карты и USB для модема MeigLink
         echo 'CONFIG_PACKAGE_luci=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
@@ -91,7 +113,6 @@ jobs:
         echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
 
     - name: Download package
-      id: package
       run: |
         cd openwrt
         make defconfig
@@ -101,7 +122,6 @@ jobs:
       id: compile
       run: |
         cd openwrt
-        echo -e "$(nproc) thread compile"
         make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -109,5 +129,5 @@ jobs:
       uses: actions/upload-artifact@v4
       if: steps.compile.outputs.status == 'success' && !cancelled()
       with:
-        name: OpenWrt_23.05.6_Cudy_LT300v3_CoreCompiled
+        name: OpenWrt_23.05.6_Cudy_LT300v3_HardPatched
         path: openwrt/bin/targets/ramips/mt76x8/*
