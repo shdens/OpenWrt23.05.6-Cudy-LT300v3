@@ -1,10 +1,10 @@
-name: OpenWrt Builder 23.05.6 cudy gpio2
+name: OpenWrt Builder 23.05.6 gpio2
 
 on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt
+  REPO_URL: https://github.com
   REPO_BRANCH: v23.05.6
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
@@ -47,7 +47,7 @@ jobs:
       run: |
         cd openwrt
         
-        # Записываем чистый DTS-код Cudy LT300 v3 поверх файла Альфы (Добавлен экспорт GPIO 2 для Reset)
+        # Записываем чистый DTS-код Cudy LT300 v3 поверх файла Альфы (Исправлен комментарий на //)
         cat << 'EOF' > target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
         // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
         
@@ -132,7 +132,7 @@ jobs:
         			gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
         		};
 
-        		# Добавлен аппаратный Reset сотового модуля MeigLink
+        		// Добавлен аппаратный Reset сотового модуля MeigLink
         		usb4g_reset {
         			gpio-export,name = "4g_reset";
         			gpio-export,output = <0>;
@@ -292,9 +292,9 @@ jobs:
         cd openwrt
         
         # --- ХАК ФИКСАЦИИ ОФИЦИАЛЬНОГО VERMAGIC ---
-        echo "eafa93300083631197429f2213697d5b" > .vermagic
-        sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
-        sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
+        echo "9606d1ef8f17bc16ff728956bb201f11" > .vermagic
+        sed -i 's/$(STAMP_KERNEL_MODIFY)/9606d1ef8f17bc16ff728956bb201f11/g' include/kernel-defaults.mk
+        sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=9606d1ef8f17bc16ff728956bb201f11/g' include/kernel.mk
         # ------------------------------------------
 
         echo 'CONFIG_TARGET_ramips=y' > .config
