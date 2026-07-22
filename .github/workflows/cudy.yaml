@@ -1,4 +1,4 @@
-name: OpenWrt Builder 23.05.6 gpio2
+name: OpenWrt Builder 23.05.6 gpio2 v2
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
       run: |
         df -hT $PWD
         rm -rf openwrt
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        git clone $REPO_URL -b $REPO_BRANCH --depth 1 openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: Hard Patch Device Source
@@ -292,8 +292,8 @@ jobs:
         sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
         sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
         # ------------------------------------------
-
-        echo 'CONFIG_TARGET_ramips=y' > .config
+        wget https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/config.buildinfo -O .config
+        echo 'CONFIG_TARGET_ramips=y' >> .config
         echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
         echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
         echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
@@ -318,6 +318,8 @@ jobs:
         cd openwrt
         make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
+        # Проверка vermagic после сборки
+        cat build_dir/target-*/linux-*/linux-*/.vermagic
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@v4
