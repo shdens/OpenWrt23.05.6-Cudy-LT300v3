@@ -292,9 +292,9 @@ jobs:
         cd openwrt
         
         # --- ХАК ФИКСАЦИИ ОФИЦИАЛЬНОГО VERMAGIC ---
-        echo "9606d1ef8f17bc16ff728956bb201f11" > .vermagic
-        sed -i 's/$(STAMP_KERNEL_MODIFY)/9606d1ef8f17bc16ff728956bb201f11/g' include/kernel-defaults.mk
-        sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=9606d1ef8f17bc16ff728956bb201f11/g' include/kernel.mk
+        echo "eafa93300083631197429f2213697d5b" > .vermagic
+        sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
+        sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
         # ------------------------------------------
 
         echo 'CONFIG_TARGET_ramips=y' > .config
