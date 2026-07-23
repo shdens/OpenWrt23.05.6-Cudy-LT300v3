@@ -283,56 +283,6 @@ jobs:
       run: |
         cd openwrt
         
-        # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK БЕЗ ПОТЕРИ ПАМЯТИ ---
-        # 1. Создаем структуру кастомных пакетов внутри Buildroot
-        mkdir -p package/local
-        
-        # 2. Генерируем Makefile для каждого вашего .ipk файла, чтобы Buildroot внедрил их нативно
-        if [ -d $GITHUB_WORKSPACE/packages ]; then
-          cp $GITHUB_WORKSPACE/packages/*.ipk package/local/ 2>/dev/null || true
-          
-          cd package/local
-          for ipk in *.ipk; do
-            [ -e "$ipk" ] || continue
-            # Извлекаем чистое имя пакета из имени файла (обрезаем версию)
-            pkg_name=$(echo "$ipk" | cut -d'_' -f1)
-            
-            # Пишем мини-инструкцию для компилятора OpenWrt
-            mkdir -p "$pkg_name"
-            cat << xEOF > "$pkg_name"/Makefile
-              include \$(TOPDIR)/rules.mk
-
-              PKG_NAME:=$pkg_name
-              PKG_VERSION:=1.0
-              PKG_RELEASE:=1
-
-              include \$(INCLUDE_DIR)/package.mk
-
-              define Package/\$(PKG_NAME)
-                SECTION:=custom
-                CATEGORY:=Base system
-                TITLE:=Custom Local IPK
-              enddefine
-
-              define Build/Compile
-              endef
-
-              define Package/\$(PKG_NAME)/install
-              	\$(INSTALL_DIR) \$(1)/
-              	# Распаковываем готовый IPK напрямую в файловую систему образа в один слой
-              	tar -C \$(1)/ -zxf \$(TOPDIR)/package/local/$ipk control.tar.gz 2>/dev/null || true
-              	tar -C \$(1)/ -zxf \$(TOPDIR)/package/local/$ipk data.tar.gz 2>/dev/null || true
-              enddefine
-
-              \$(eval \$(call BuildPackage,\$(PKG_NAME)))
-              xEOF
-            # Прописываем активацию пакета в итоговый .config
-            echo "CONFIG_PACKAGE_${pkg_name}=y" >> ../../.config
-          done
-          cd ../..
-        fi
-        # ------------------------------------------------
-
         # --- ХАК ФИКСАЦИИ НОВОГО VERMAGIC ---
         echo "eafa93300083631197429f2213697d5b" > .vermagic
         sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
@@ -358,13 +308,37 @@ jobs:
         echo 'CONFIG_PACKAGE_curl=y' >> .config
         echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
         # --- АКТИВАЦИЯ КАСТОМНЫХ IPK ---
-        # Пропишите сюда точные имена ваших .ipk файлов (без версий и расширения .ipk).
+        # Питон сам их добавит в конфиг
         # Например, если файл называется luci-app-mycustom_1.0_all.ipk, пишем:
-        echo 'CONFIG_PACKAGE_xfrpc=y' >> .config
-        echo 'CONFIG_PACKAGE_modemband=y' >> .config
-        echo 'CONFIG_PACKAGE_luci-app-modemband=y' >> .config
+        #echo 'CONFIG_PACKAGE_xfrpc=y' >> .config
+        #echo 'CONFIG_PACKAGE_modemband=y' >> .config
+        #echo 'CONFIG_PACKAGE_luci-app-modemband=y' >> .config
         # --------
+                # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK ЧЕРЕЗ PYTHON БЕЗ ПОТЕРИ ПАМЯТИ ---
+        python3 -c "
+        import os, shutil
+        src_dir = os.environ.get('GITHUB_WORKSPACE') + '/packages'
+        dest_dir = 'package/local'
+        os.makedirs(dest_dir, exist_ok=True)
         
+        if os.path.exists(src_dir):
+            files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
+            for f in files:
+                shutil.copy(os.path.join(src_dir, f), dest_dir)
+                pkg_name = f.split('_')[0]
+                pkg_folder = os.path.join(dest_dir, pkg_name)
+                os.makedirs(pkg_folder, exist_ok=True)
+                
+                makefile_content = f'''include \$(TOPDIR)/rules.mk\n\nPKG_NAME:={pkg_name}\nPKG_VERSION:=1.0\nPKG_RELEASE:=1\n\ninclude \$(INCLUDE_DIR)/package.mk\n\ndefine Package/\$(PKG_NAME)\n  SECTION:=custom\n  CATEGORY:=Base system\n  TITLE:=Custom Local IPK\nendef\n\ndefine Build/Compile\nendef\n\ndefine Package/\$(PKG_NAME)/install\n\t\$(INSTALL_DIR) \$(1)/\n\ttar -C \$(1)/ -zxf \$(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\nendef\n\n\$(eval \$(call BuildPackage,\$(PKG_NAME)))\n'''
+                with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
+                    mf.write(makefile_content)
+                
+                with open('.config', 'a') as cfg:
+                    cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\\n')
+            print(f'Успешно интегрировано кастомных пакетов: {len(files)}')
+        "
+        # -------------------------------------------------------------
+
     - name: Download package
       run: |
         cd openwrt
