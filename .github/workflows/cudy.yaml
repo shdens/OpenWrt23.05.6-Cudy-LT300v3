@@ -328,7 +328,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
         # Проверка vermagic после сборки
         cat build_dir/target-*/linux-*/linux-*/.vermagic
-        rm openwrt/bin/targets/ramips/mt76x8/*.tar
+        rm bin/targets/ramips/mt76x8/*.tar
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@v4
