@@ -131,13 +131,6 @@ jobs:
         			gpio-export,output = <0>;
         			gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
         		};
-        
-        		// Добавлен аппаратный Reset сотового модуля MeigLink
-        		usb4g_reset {
-        			gpio-export,name = "4g_reset";
-        			gpio-export,output = <0>;
-        			gpios = <&gpio 2 GPIO_ACTIVE_HIGH>;
-        		};
         	};
         };
         
@@ -289,6 +282,24 @@ jobs:
     - name: Configure Target Config
       run: |
         cd openwrt
+                # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK ПАКЕТОВ ---
+        # 1. Создаем папку локального репозитория внутри OpenWrt
+        mkdir -p bin/packages/mipsel_24kc/local
+        
+        # 2. Копируем ваши .ipk файлы из папки репозитория
+        if [ -d $GITHUB_WORKSPACE/packages ]; then
+          cp $GITHUB_WORKSPACE/packages/*.ipk bin/packages/mipsel_24kc/local/ 2>/dev/null || true
+        fi
+        
+        # 3. Генерируем индекс локальных пакетов (Packages.gz), чтобы менеджер opkg их увидел
+        cd bin/packages/mipsel_24kc/local
+        ../../../../staging_dir/host/bin/ipkg-make-index . > Packages
+        gzip -9nc Packages > Packages.gz
+        cd ../../../..
+        
+        # 4. Прописываем локальный путь в список источников фидов OpenWrt
+        echo "src/gz local_packages file://$GITHUB_WORKSPACE/openwrt/bin/packages/mipsel_24kc/local" >> feeds.conf.default
+        # --------------------------------------
         
         # --- ХАК ФИКСАЦИИ НОВОГО VERMAGIC ---
         echo "eafa93300083631197429f2213697d5b" > .vermagic
@@ -308,12 +319,20 @@ jobs:
         echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
         echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
+        # --- доп пакеты
         echo 'CONFIG_PACKAGE_sms-tool=y' >> .config
         echo 'CONFIG_PACKAGE_luci-app-sqm=y' >> .config
         echo 'CONFIG_PACKAGE_ca-bundle=y' >> .config
         echo 'CONFIG_PACKAGE_curl=y' >> .config
         echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
-
+        # --- АКТИВАЦИЯ КАСТОМНЫХ IPK ---
+        # Пропишите сюда точные имена ваших .ipk файлов (без версий и расширения .ipk).
+        # Например, если файл называется luci-app-mycustom_1.0_all.ipk, пишем:
+        echo 'CONFIG_PACKAGE_xfrpc=y' >> .config
+        echo 'CONFIG_PACKAGE_modemband=y' >> .config
+        echo 'CONFIG_PACKAGE_luci-app-modemband=y' >> .config
+        # --------
+        
     - name: Download package
       run: |
         cd openwrt
