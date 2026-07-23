@@ -282,25 +282,57 @@ jobs:
     - name: Configure Target Config
       run: |
         cd openwrt
-                # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK ПАКЕТОВ ---
-        # 1. Создаем папку локального репозитория внутри OpenWrt
-        mkdir -p bin/packages/mipsel_24kc/local
         
-        # 2. Копируем ваши .ipk файлы из папки репозитория
+        # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK БЕЗ ПОТЕРИ ПАМЯТИ ---
+        # 1. Создаем структуру кастомных пакетов внутри Buildroot
+        mkdir -p package/local
+        
+        # 2. Генерируем Makefile для каждого вашего .ipk файла, чтобы Buildroot внедрил их нативно
         if [ -d $GITHUB_WORKSPACE/packages ]; then
-          cp $GITHUB_WORKSPACE/packages/*.ipk bin/packages/mipsel_24kc/local/ 2>/dev/null || true
+          cp $GITHUB_WORKSPACE/packages/*.ipk package/local/ 2>/dev/null || true
+          
+          cd package/local
+          for ipk in *.ipk; do
+            [ -e "$ipk" ] || continue
+            # Извлекаем чистое имя пакета из имени файла (обрезаем версию)
+            pkg_name=$(echo "$ipk" | cut -d'_' -f1)
+            
+            # Пишем мини-инструкцию для компилятора OpenWrt
+            mkdir -p "$pkg_name"
+            cat << xEOF > "$pkg_name"/Makefile
+              include \$(TOPDIR)/rules.mk
+
+              PKG_NAME:=$pkg_name
+              PKG_VERSION:=1.0
+              PKG_RELEASE:=1
+
+              include \$(INCLUDE_DIR)/package.mk
+
+              define Package/\$(PKG_NAME)
+                SECTION:=custom
+                CATEGORY:=Base system
+                TITLE:=Custom Local IPK
+              enddefine
+
+              define Build/Compile
+              endef
+
+              define Package/\$(PKG_NAME)/install
+              	\$(INSTALL_DIR) \$(1)/
+              	# Распаковываем готовый IPK напрямую в файловую систему образа в один слой
+              	tar -C \$(1)/ -zxf \$(TOPDIR)/package/local/$ipk control.tar.gz 2>/dev/null || true
+              	tar -C \$(1)/ -zxf \$(TOPDIR)/package/local/$ipk data.tar.gz 2>/dev/null || true
+              enddefine
+
+              \$(eval \$(call BuildPackage,\$(PKG_NAME)))
+              xEOF
+            # Прописываем активацию пакета в итоговый .config
+            echo "CONFIG_PACKAGE_${pkg_name}=y" >> ../../.config
+          done
+          cd ../..
         fi
-        
-        # 3. Генерируем индекс локальных пакетов (Packages.gz), чтобы менеджер opkg их увидел
-        cd bin/packages/mipsel_24kc/local
-        ../../../../staging_dir/host/bin/ipkg-make-index . > Packages
-        gzip -9nc Packages > Packages.gz
-        cd ../../../..
-        
-        # 4. Прописываем локальный путь в список источников фидов OpenWrt
-        echo "src/gz local_packages file://$GITHUB_WORKSPACE/openwrt/bin/packages/mipsel_24kc/local" >> feeds.conf.default
-        # --------------------------------------
-        
+        # ------------------------------------------------
+
         # --- ХАК ФИКСАЦИИ НОВОГО VERMAGIC ---
         echo "eafa93300083631197429f2213697d5b" > .vermagic
         sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
