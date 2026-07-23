@@ -47,7 +47,7 @@ jobs:
       run: |
         cd openwrt
         
-        # Записываем DTS-код Cudy LT300 v3, где устранены ВСЕ ошибки "Bad cell count"
+        # Записываем чистый DTS-код Cudy LT300 v3 поверх файла Альфы (Все ячейки адресации выверены)
         cat << 'EOF' > target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
         // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
         
@@ -130,6 +130,13 @@ jobs:
         			gpio-export,name = "4g";
         			gpio-export,output = <0>;
         			gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
+        		};
+        
+        		// Добавлен аппаратный Reset сотового модуля MeigLink
+        		usb4g_reset {
+        			gpio-export,name = "4g_reset";
+        			gpio-export,output = <0>;
+        			gpios = <&gpio 2 GPIO_ACTIVE_HIGH>;
         		};
         	};
         };
@@ -263,9 +270,6 @@ jobs:
 
         # Отключаем удаление файлов при ложной проверке 'too big > 0'
         sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
-
-        # Исправляем самый первый, корневой Bad cell count драйвера spi-nor самого OpenWrt
-        sed -i 's/compatible = "fixed-partitions";/compatible = "fixed-partitions";\n\t\t#address-cells = <1>;\n\t\t#size-cells = <1>;/1' target/linux/ramips/dts/mt7628an.dtsi
 
     - name: Load custom feeds
       run: |
