@@ -276,6 +276,8 @@ jobs:
     - name: Update and Install feeds
       run: |
         cd openwrt
+        # Отключаем проблемный фид телефонии, чтобы его ошибки не прерывали сборку
+        sed -i 's/^src-git telephony/# src-git telephony/g' feeds.conf.default
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
