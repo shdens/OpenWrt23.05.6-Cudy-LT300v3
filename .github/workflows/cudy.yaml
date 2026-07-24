@@ -310,12 +310,7 @@ jobs:
         echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
         # --- АКТИВАЦИЯ КАСТОМНЫХ IPK ---
         # Питон сам их добавит в конфиг
-        # Например, если файл называется luci-app-mycustom_1.0_all.ipk, пишем:
-        #echo 'CONFIG_PACKAGE_xfrpc=y' >> .config
-        #echo 'CONFIG_PACKAGE_modemband=y' >> .config
-        #echo 'CONFIG_PACKAGE_luci-app-modemband=y' >> .config
-        # --------
-                # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK ЧЕРЕЗ PYTHON БЕЗ ПОТЕРИ ПАМЯТИ ---
+        # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK ЧЕРЕЗ PYTHON БЕЗ ПОТЕРИ ПАМЯТИ ---
         python3 -c "
         import os, shutil
         src_dir = os.environ.get('GITHUB_WORKSPACE') + '/packages'
@@ -326,6 +321,7 @@ jobs:
             files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
             for f in files:
                 shutil.copy(os.path.join(src_dir, f), dest_dir)
+                # ИСПРАВЛЕНО: Берем первый элемент [0] для получения чистого имени пакета
                 pkg_name = f.split('_')[0]
                 pkg_folder = os.path.join(dest_dir, pkg_name)
                 os.makedirs(pkg_folder, exist_ok=True)
@@ -335,7 +331,7 @@ jobs:
                     mf.write(makefile_content)
                 
                 with open('.config', 'a') as cfg:
-                    cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\\n')
+                    cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
             print(f'Успешно интегрировано кастомных пакетов: {len(files)}')
         "
         # -------------------------------------------------------------
