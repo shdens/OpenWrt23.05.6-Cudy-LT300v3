@@ -1,4 +1,4 @@
-name: OpenWrt Builder 23.05.6 gpio2 v3
+name: OpenWrt Builder 23.05.6 gpio2 v4
 
 on:
   workflow_dispatch:
@@ -238,6 +238,8 @@ jobs:
         	mediatek,portdisable = <0x3c>;
         };
         EOF
+        # Жестко заменяем сбойный блок partitions в общем файле ядра, добавляя нужные ячейки
+        sed -i '/partitions {/,/};/c\		partitions {\n\t\t\tcompatible = "fixed-partitions";\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;\n\t\t};' target/linux/ramips/dts/mt7628an.dtsi
 
         # Модифицируем mt76x8.mk под параметры Cudy через Python
         python3 -c "
