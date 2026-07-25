@@ -1,4 +1,4 @@
-name: OpenWrt Builder 23.05.6 gpio2 v4
+name: OpenWrt Builder 23.05.6 gpio2 v5
 
 on:
   workflow_dispatch:
@@ -316,7 +316,7 @@ TARGET_DEVICES += alfa-network_awusfree1'''
         echo 'CONFIG_PACKAGE_curl=y' >> .config
         echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
 
-        # --- ЧИСТЫЙ PYTHON СКРИПТ БЕЗ ТАБУЛЯЦИИ ---
+        # --- ЧИСТЫЙ PYTHON СКРИПТ (БЕЗ СИМВОЛОВ ТАБУЛЯЦИИ В YAML) ---
         python3 -c "
 import os, shutil, re
 
@@ -339,6 +339,7 @@ os.makedirs(dest_dir, exist_ok=True)
 
 if os.path.exists(src_dir):
     files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
+    TAB = chr(9)
     for f in files:
         shutil.copy(os.path.join(src_dir, f), dest_dir)
         pkg_name = f.split('_')[0]
@@ -346,11 +347,11 @@ if os.path.exists(src_dir):
         os.makedirs(pkg_folder, exist_ok=True)
 
         lines = [
-            'include \$(TOPDIR)/rules.mk\n',
+            'include $(TOPDIR)/rules.mk\n',
             f'PKG_NAME:={pkg_name}\n',
             'PKG_VERSION:=1.0\n',
             'PKG_RELEASE:=1\n\n',
-            'include \$(INCLUDE_DIR)/package.mk\n\n',
+            'include $(INCLUDE_DIR)/package.mk\n\n',
             f'define Package/{pkg_name}\n',
             '  SECTION:=custom\n',
             '  CATEGORY:=Base system\n',
@@ -359,10 +360,10 @@ if os.path.exists(src_dir):
             'define Build/Compile\n',
             'endef\n\n',
             f'define Package/{pkg_name}/install\n',
-            '\\t\$(INSTALL_DIR) \$(1)/\n',
-            f'\\ttar -C \$(1)/ -zxf \$(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n',
+            f'{TAB}$(INSTALL_DIR) $(1)/\n',
+            f'{TAB}tar -C $(1)/ -zxf $(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n',
             'endef\n\n',
-            f'\$(eval \$(call BuildPackage,{pkg_name}))\n'
+            f'$(eval $(call BuildPackage,{pkg_name}))\n'
         ]
         with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
             mf.writelines(lines)
