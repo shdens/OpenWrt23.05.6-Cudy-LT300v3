@@ -316,19 +316,23 @@ jobs:
         # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK ЧЕРЕЗ PYTHON БЕЗ ПОТЕРИ ПАМЯТИ ---
         # --- ИСПРАВЛЕНИЕ BAD CELL COUNT И ИНТЕГРАЦИЯ IPK ЧЕРЕЗ PYTHON ---
         python3 -c "
-        import os, shutil
+        import os, shutil, re
         
-        # 1. Исправляем варнинги ядра на уровне исходников dtsi
+        # Исправляем варнинги ядра на уровне dtsi с игнорированием любых пробелов и табов
         dtsi_path = 'target/linux/ramips/dts/mt7628an.dtsi'
         if os.path.exists(dtsi_path):
             with open(dtsi_path, 'r') as f:
                 dtsi = f.read()
-            bad_block = 'partitions {\n\t\t\tcompatible = \"fixed-partitions\";\n\t\t};'
-            good_block = 'partitions {\n\t\t\tcompatible = \"fixed-partitions\";\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;\n\t\t};'
-            if bad_block in dtsi:
+            
+            # Находим блок partitions и принудительно инжектируем туда директивы ячеек
+            pattern = r'(partitions\s*\{\s*compatible\s*=\s*\"fixed-partitions\";)'
+            replacement = r'\1\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;'
+            
+            if re.search(pattern, dtsi):
+                new_dtsi = re.sub(pattern, replacement, dtsi)
                 with open(dtsi_path, 'w') as f:
-                    f.write(dtsi.replace(bad_block, good_block))
-                print('Варнинги Bad cell count в ядре успешно исправлены!')
+                    f.write(new_dtsi)
+                print('Варнинги Bad cell count в ядре успешно исправлены через Regex!')
 
         # 2. Встраиваем кастомные пакеты
         src_dir = os.environ.get('GITHUB_WORKSPACE') + '/packages'
