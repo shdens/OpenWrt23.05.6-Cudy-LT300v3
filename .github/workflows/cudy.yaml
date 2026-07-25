@@ -238,30 +238,32 @@ jobs:
         	mediatek,portdisable = <0x3c>;
         };
         EOF
+
         # Заменяем сбойный блок partitions
         sed -i '/partitions {/,/};/c\		partitions {\n\t\t\tcompatible = "fixed-partitions";\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;\n\t\t};' target/linux/ramips/dts/mt7628an.dtsi
 
         # Модифицируем mt76x8.mk под параметры Cudy через Python
         python3 -c "
-        path = 'target/linux/ramips/image/mt76x8.mk'
-        with open(path, 'r') as f:
-            content = f.read()
-        start = content.find('define Device/alfa-network_awusfree1')
-        end = content.find('endef\nTARGET_DEVICES += alfa-network_awusfree1') + len('endef\nTARGET_DEVICES += alfa-network_awusfree1')
-        if start != -1 and end != -1:
-            new_block = '''define Device/alfa-network_awusfree1
-          \$(Device/cc7628an)
-          IMAGE_SIZE := 15872k
-          DEVICE_VENDOR := Cudy
-          DEVICE_MODEL := LT300
-          DEVICE_VARIANT := v3
-          SUPPORTED_DEVICES := cudy,lt300-v3
-        endef
-        TARGET_DEVICES += alfa-network_awusfree1'''
-            content = content[:start] + new_block + content[end:]
-            with open(path, 'w') as f:
-                f.write(content)
-        "
+path = 'target/linux/ramips/image/mt76x8.mk'
+with open(path, 'r') as f:
+    content = f.read()
+start = content.find('define Device/alfa-network_awusfree1')
+end = content.find('endef\nTARGET_DEVICES += alfa-network_awusfree1') + len('endef\nTARGET_DEVICES += alfa-network_awusfree1')
+if start != -1 and end != -1:
+    new_block = '''define Device/alfa-network_awusfree1
+  \$(Device/cc7628an)
+  IMAGE_SIZE := 15872k
+  DEVICE_VENDOR := Cudy
+  DEVICE_MODEL := LT300
+  DEVICE_VARIANT := v3
+  SUPPORTED_DEVICES := cudy,lt300-v3
+endef
+TARGET_DEVICES += alfa-network_awusfree1'''
+    content = content[:start] + new_block + content[end:]
+    with open(path, 'w') as f:
+        f.write(content)
+"
+
         # Патчим 02_network для добавления конфигурации портов Cudy LT300 v3
         sed -i \
           -e '/cudy,tr1200-v1)/i \    cudy,lt300-v3)\n        ucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"\n        ucidef_set_interface "wwan" device "usb0" protocol "dhcp"\n        uci add_list firewall.@zone[1].network='\''wwan'\''\n        uci add_list firewall.@zone[1].network='\''wwan6'\''\n        ;;' \
@@ -314,70 +316,61 @@ jobs:
         echo 'CONFIG_PACKAGE_curl=y' >> .config
         echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
 
-        # --- ИСПРАВЛЕННЫЙ ЕДИНЫЙ PYTHON СКРИПТ ---
+        # --- ЧИСТЫЙ PYTHON СКРИПТ БЕЗ СИНТАКСИЧЕСКИХ ОШИБОК YAML ---
         python3 -c "
-        import os, shutil, re
+import os, shutil, re
 
-        # 1. Исправление Bad Cell Count
-        dts_path = 'target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts'
-        if os.path.exists(dts_path):
-            with open(dts_path, 'r') as f:
-                content = f.read()
-            pattern = r'(partitions\s*\{\s*compatible\s*=\s*\"fixed-partitions\";)'
-            replacement = r'\1\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;'
-            if re.search(pattern, content):
-                new_content = re.sub(pattern, replacement, content)
-                with open(dts_path, 'w') as f:
-                    f.write(new_content)
-                print('Патч успешно применён к Alfa AWUSFREE1!')
-            else:
-                print('Блок partitions не найден.')
+dts_path = 'target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts'
+if os.path.exists(dts_path):
+    with open(dts_path, 'r') as f:
+        content = f.read()
+    pattern = r'(partitions\s*\{\s*compatible\s*=\s*\"fixed-partitions\";)'
+    replacement = r'\1\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;'
+    if re.search(pattern, content):
+        new_content = re.sub(pattern, replacement, content)
+        with open(dts_path, 'w') as f:
+            f.write(new_content)
+        print('Патч успешно применён к Alfa AWUSFREE1!')
 
-        # 2. Встраивание кастомных IPK пакетов
-        workspace = os.environ.get('GITHUB_WORKSPACE', '')
-        src_dir = os.path.join(workspace, 'packages')
-        dest_dir = 'package/local'
-        os.makedirs(dest_dir, exist_ok=True)
+workspace = os.environ.get('GITHUB_WORKSPACE', '')
+src_dir = os.path.join(workspace, 'packages')
+dest_dir = 'package/local'
+os.makedirs(dest_dir, exist_ok=True)
 
-        if os.path.exists(src_dir):
-            files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
-            for f in files:
-                shutil.copy(os.path.join(src_dir, f), dest_dir)
-                pkg_name = f.split('_')[0]
-                pkg_folder = os.path.join(dest_dir, pkg_name)
-                os.makedirs(pkg_folder, exist_ok=True)
+if os.path.exists(src_dir):
+    files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
+    for f in files:
+        shutil.copy(os.path.join(src_dir, f), dest_dir)
+        pkg_name = f.split('_')[0]
+        pkg_folder = os.path.join(dest_dir, pkg_name)
+        os.makedirs(pkg_folder, exist_ok=True)
 
-                makefile_content = f'''include \$(TOPDIR)/rules.mk
+        lines = [
+            'include \$(TOPDIR)/rules.mk\n',
+            f'PKG_NAME:={pkg_name}\n',
+            'PKG_VERSION:=1.0\n',
+            'PKG_RELEASE:=1\n\n',
+            'include \$(INCLUDE_DIR)/package.mk\n\n',
+            f'define Package/{pkg_name}\n',
+            '  SECTION:=custom\n',
+            '  CATEGORY:=Base system\n',
+            f'  TITLE:={pkg_name} Custom Package\n',
+            'endef\n\n',
+            'define Build/Compile\n',
+            'endef\n\n',
+            f'define Package/{pkg_name}/install\n',
+            '\t\$(INSTALL_DIR) \$(1)/\n',
+            f'\ttar -C \$(1)/ -zxf \$(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n',
+            'endef\n\n',
+            f'\$(eval \$(call BuildPackage,{pkg_name}))\n'
+        ]
+        with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
+            mf.writelines(lines)
 
-PKG_NAME:={pkg_name}
-PKG_VERSION:=1.0
-PKG_RELEASE:=1
-
-include \$(INCLUDE_DIR)/package.mk
-
-define Package/{pkg_name}
-  SECTION:=custom
-  CATEGORY:=Base system
-  TITLE:={pkg_name} Custom Package
-endef
-
-define Build/Compile
-endef
-
-define Package/{pkg_name}/install
-\t\$(INSTALL_DIR) \$(1)/
-\ttar -C \$(1)/ -zxf \$(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true
-endef
-
-\$(eval \$(call BuildPackage,{pkg_name}))
-'''
-                with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
-                    mf.write(makefile_content)
-
-                with open('.config', 'a') as cfg:
-                    cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
-            print(f'Интегрировано кастомных пакетов: {len(files)}')
-        "
+        with open('.config', 'a') as cfg:
+            cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
+    print(f'Интегрировано кастомных пакетов: {len(files)}')
+"
 
     - name: Download package
       run: |
