@@ -268,7 +268,7 @@ jobs:
           -e '/cudy,tr1200-v1)/i \    cudy,lt300-v3)\n        ucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"\n        ucidef_set_interface "wwan" device "usb0" protocol "dhcp"\n        uci add_list firewall.@zone[1].network='\''wwan'\''\n        uci add_list firewall.@zone[1].network='\''wwan6'\''\n        ;;' \
           -e '/hiwifi,hc5611|/i \    cudy,lt300-v3|\\' \
           -e '/hiwifi,hc5611|/a \    wan_mac=$(macaddr_add "$(cat /sys/class/net/eth0/address)" 1)' \
-          02_network
+          target/linux/ramips/mt76x8/base-files/etc/board.d/02_network
 
         # Отключаем удаление файлов при ложной проверке 'too big > 0'
         sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
