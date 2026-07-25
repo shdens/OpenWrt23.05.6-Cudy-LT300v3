@@ -353,6 +353,7 @@ jobs:
         #pwd
         #rm openwrt/bin/targets/ramips/mt76x8/*.tar.xz
         rm bin/targets/ramips/mt76x8/*.tar.xz
+        rm bin/targets/ramips/mt76x8/*.tar.zst
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@v4
