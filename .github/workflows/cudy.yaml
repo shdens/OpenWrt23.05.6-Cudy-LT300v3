@@ -1,4 +1,4 @@
-name: OpenWrt Builder 23.05.6 gpio2 v5
+name: OpenWrt Builder 23.05.6 gpio2 v4
 
 on:
   workflow_dispatch:
@@ -242,8 +242,8 @@ jobs:
         # Заменяем сбойный блок partitions
         sed -i '/partitions {/,/};/c\		partitions {\n\t\t\tcompatible = "fixed-partitions";\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;\n\t\t};' target/linux/ramips/dts/mt7628an.dtsi
 
-        # Модифицируем mt76x8.mk под параметры Cudy через Python
-        python3 -c "
+        # Модифицируем mt76x8.mk под параметры Cudy через Python-файл
+        cat << 'EOF' > patch_mk.py
 path = 'target/linux/ramips/image/mt76x8.mk'
 with open(path, 'r') as f:
     content = f.read()
@@ -251,7 +251,7 @@ start = content.find('define Device/alfa-network_awusfree1')
 end = content.find('endef\nTARGET_DEVICES += alfa-network_awusfree1') + len('endef\nTARGET_DEVICES += alfa-network_awusfree1')
 if start != -1 and end != -1:
     new_block = '''define Device/alfa-network_awusfree1
-  \$(Device/cc7628an)
+  $(Device/cc7628an)
   IMAGE_SIZE := 15872k
   DEVICE_VENDOR := Cudy
   DEVICE_MODEL := LT300
@@ -262,7 +262,9 @@ TARGET_DEVICES += alfa-network_awusfree1'''
     content = content[:start] + new_block + content[end:]
     with open(path, 'w') as f:
         f.write(content)
-"
+EOF
+        python3 patch_mk.py
+        rm patch_mk.py
 
         # Патчим 02_network для добавления конфигурации портов Cudy LT300 v3
         sed -i \
@@ -316,8 +318,8 @@ TARGET_DEVICES += alfa-network_awusfree1'''
         echo 'CONFIG_PACKAGE_curl=y' >> .config
         echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
 
-        # --- ЧИСТЫЙ PYTHON СКРИПТ (БЕЗ СИМВОЛОВ ТАБУЛЯЦИИ В YAML) ---
-        python3 -c "
+        # --- СОЗДАЕМ PYTHON-СКРИПТ ОТДЕЛЬНО ДЛЯ БЕЗОПАСНОСТИ YAML ---
+        cat << 'EOF' > patch_config.py
 import os, shutil, re
 
 dts_path = 'target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts'
@@ -339,39 +341,42 @@ os.makedirs(dest_dir, exist_ok=True)
 
 if os.path.exists(src_dir):
     files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
-    TAB = chr(9)
+    t = chr(9)
     for f in files:
         shutil.copy(os.path.join(src_dir, f), dest_dir)
         pkg_name = f.split('_')[0]
         pkg_folder = os.path.join(dest_dir, pkg_name)
         os.makedirs(pkg_folder, exist_ok=True)
 
-        lines = [
-            'include $(TOPDIR)/rules.mk\n',
-            f'PKG_NAME:={pkg_name}\n',
-            'PKG_VERSION:=1.0\n',
-            'PKG_RELEASE:=1\n\n',
-            'include $(INCLUDE_DIR)/package.mk\n\n',
-            f'define Package/{pkg_name}\n',
-            '  SECTION:=custom\n',
-            '  CATEGORY:=Base system\n',
-            f'  TITLE:={pkg_name} Custom Package\n',
-            'endef\n\n',
-            'define Build/Compile\n',
-            'endef\n\n',
-            f'define Package/{pkg_name}/install\n',
-            f'{TAB}$(INSTALL_DIR) $(1)/\n',
-            f'{TAB}tar -C $(1)/ -zxf $(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n',
-            'endef\n\n',
-            f'$(eval $(call BuildPackage,{pkg_name}))\n'
-        ]
+        makefile_content = (
+            "include $(TOPDIR)/rules.mk\n\n"
+            f"PKG_NAME:={pkg_name}\n"
+            "PKG_VERSION:=1.0\n"
+            "PKG_RELEASE:=1\n\n"
+            "include $(INCLUDE_DIR)/package.mk\n\n"
+            f"define Package/{pkg_name}\n"
+            "  SECTION:=custom\n"
+            "  CATEGORY:=Base system\n"
+            f"  TITLE:={pkg_name} Custom Package\n"
+            "endef\n\n"
+            "define Build/Compile\n"
+            "endef\n\n"
+            f"define Package/{pkg_name}/install\n"
+            f"{t}$(INSTALL_DIR) $(1)/\n"
+            f"{t}tar -C $(1)/ -zxf $(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n"
+            "endef\n\n"
+            f"$(eval $(call BuildPackage,{pkg_name}))\n"
+        )
+
         with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
-            mf.writelines(lines)
+            mf.write(makefile_content)
 
         with open('.config', 'a') as cfg:
             cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
     print(f'Интегрировано кастомных пакетов: {len(files)}')
-"
+EOF
+        python3 patch_config.py
+        rm patch_config.py
 
     - name: Download package
       run: |
@@ -392,7 +397,7 @@ if os.path.exists(src_dir):
         mv bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.x  bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz
 
     - name: Upload firmware directory
-      uses: actions/upload-artifact@v4
+      uses: uses/upload-artifact@v4
       if: steps.compile.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_23.05.6_Cudy_LT300v3_HardPatched
