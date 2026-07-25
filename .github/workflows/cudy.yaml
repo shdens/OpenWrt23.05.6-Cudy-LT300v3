@@ -286,101 +286,99 @@ jobs:
         sed -i 's/^src-git telephony/# src-git telephony/g' feeds.conf.default
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-
-    - name: Configure Target Config
-      run: |
-        cd openwrt
-        
-        # --- ХАК ФИКСАЦИИ НОВОГО VERMAGIC ---
-        echo "eafa93300083631197429f2213697d5b" > .vermagic
-        sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
-        sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
-        # ------------------------------------------
-        wget https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/config.buildinfo -O .config
-        echo 'CONFIG_TARGET_ramips=y' >> .config
-        echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
-        echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
-        echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
-        
-        # Системные пакеты и сотовые драйверы под MeigLink (Протокол RNDIS)
-        echo 'CONFIG_PACKAGE_luci=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
-        echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
-        # --- доп пакеты
-        echo 'CONFIG_PACKAGE_sms-tool=y' >> .config
-        echo 'CONFIG_PACKAGE_luci-app-sqm=y' >> .config
-        echo 'CONFIG_PACKAGE_ca-bundle=y' >> .config
-        echo 'CONFIG_PACKAGE_curl=y' >> .config
-        echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
-        # --- АКТИВАЦИЯ КАСТОМНЫХ IPK ---
-        # Питон сам их добавит в конфиг
-        # --- ИНТЕГРАЦИЯ ГОТОВЫХ IPK ЧЕРЕЗ PYTHON БЕЗ ПОТЕРИ ПАМЯТИ ---
-        # --- ИСПРАВЛЕНИЕ BAD CELL COUNT И ИНТЕГРАЦИЯ IPK ЧЕРЕЗ PYTHON ---
-        python3 -c "
-        import re
-        
-        dts_path = 'target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts'
-        
-        with open(dts_path, 'r') as f:
-            content = f.read()
-        
-        pattern = r'(partitions\s*\{\s*compatible\s*=\s*\"fixed-partitions\";)'
-        replacement = r'\1\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;'
-        
-        if re.search(pattern, content):
-            new_content = re.sub(pattern, replacement, content)
-            with open(dts_path, 'w') as f:
-                f.write(new_content)
-            print('Патч успешно применён к Alfa AWUSFREE1!')
-        else:
-            print('Блок partitions не найден.')
-        "
-
-        # 2. Встраиваем кастомные пакеты
-        src_dir = os.environ.get('GITHUB_WORKSPACE') + '/packages'
-        dest_dir = 'package/local'
-        os.makedirs(dest_dir, exist_ok=True)
-        
-        if os.path.exists(src_dir):
-            files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
-            for f in files:
-                shutil.copy(os.path.join(src_dir, f), dest_dir)
-                pkg_name = f.split('_')[0]
-                pkg_folder = os.path.join(dest_dir, pkg_name)
-                os.makedirs(pkg_folder, exist_ok=True)
-                
-                makefile_content = (
-                    'include $(TOPDIR)/rules.mk\n\n'
-                    f'PKG_NAME:={pkg_name}\n'
-                    'PKG_VERSION:=1.0\n'
-                    'PKG_RELEASE:=1\n\n'
-                    'include $(INCLUDE_DIR)/package.mk\n\n'
-                    f'define Package/{pkg_name}\n'
-                    '  SECTION:=custom\n'
-                    '  CATEGORY:=Base system\n'
-                    f'  TITLE:={pkg_name} Custom Package\n'
-                    'endef\n\n'
-                    'define Build/Compile\n'
-                    'endef\n\n'
-                    f'define Package/{pkg_name}/install\n'
-                    '\t$(INSTALL_DIR) $(1)/\n'
-                    f'\ttar -C $(1)/ -zxf $(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n'
-                    'endef\n\n'
-                    f'$(eval $(call BuildPackage,{pkg_name}))\n'
-                )
-                with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
-                    mf.write(makefile_content)
-                
-                with open('.config', 'a') as cfg:
-                    cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
-            print(f'Интегрировано кастомных пакетов: {len(files)}')
-        "
-        # -------------------------------------------------------------
-
-
+     - name: Configure Target Config
+       run: |
+              cd openwrt
+              
+              # --- ХАК ФИКСАЦИИ НОВОГО VERMAGIC ---
+              echo "eafa93300083631197429f2213697d5b" > .vermagic
+              sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
+              sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
+              # ------------------------------------------
+              wget https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/config.buildinfo -O .config
+              echo 'CONFIG_TARGET_ramips=y' >> .config
+              echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
+              echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
+              echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
+              
+              # Системные пакеты и сотовые драйверы под MeigLink (Протокол RNDIS)
+              echo 'CONFIG_PACKAGE_luci=y' >> .config
+              echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
+              echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
+              echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
+              echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
+              echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
+              # --- доп пакеты
+              echo 'CONFIG_PACKAGE_sms-tool=y' >> .config
+              echo 'CONFIG_PACKAGE_luci-app-sqm=y' >> .config
+              echo 'CONFIG_PACKAGE_ca-bundle=y' >> .config
+              echo 'CONFIG_PACKAGE_curl=y' >> .config
+              echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
+      
+              # --- ОБЪЕДИНЕННЫЙ PYTHON СКРИПТ ---
+              python3 -c "
+              import os, shutil, re
+      
+              # 1. Исправление Bad Cell Count
+              dts_path = 'target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts'
+              if os.path.exists(dts_path):
+                  with open(dts_path, 'r') as f:
+                      content = f.read()
+                  pattern = r'(partitions\s*\{\s*compatible\s*=\s*\"fixed-partitions\";)'
+                  replacement = r'\1\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;'
+                  if re.search(pattern, content):
+                      new_content = re.sub(pattern, replacement, content)
+                      with open(dts_path, 'w') as f:
+                          f.write(new_content)
+                      print('Патч успешно применён к Alfa AWUSFREE1!')
+                  else:
+                      print('Блок partitions не найден.')
+      
+              # 2. Встраивание кастомных IPK пакетов
+              workspace = os.environ.get('GITHUB_WORKSPACE', '')
+              src_dir = os.path.join(workspace, 'packages')
+              dest_dir = 'package/local'
+              os.makedirs(dest_dir, exist_ok=True)
+      
+              if os.path.exists(src_dir):
+                  files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
+                  for f in files:
+                      shutil.copy(os.path.join(src_dir, f), dest_dir)
+                      pkg_name = f.split('_')[0]
+                      pkg_folder = os.path.join(dest_dir, pkg_name)
+                      os.makedirs(pkg_folder, exist_ok=True)
+      
+                      makefile_content = f'''include \$(TOPDIR)/rules.mk
+      
+              PKG_NAME:={pkg_name}
+              PKG_VERSION:=1.0
+              PKG_RELEASE:=1
+              
+              include \$(INCLUDE_DIR)/package.mk
+              
+              define Package/{pkg_name}
+                SECTION:=custom
+                CATEGORY:=Base system
+                TITLE:={pkg_name} Custom Package
+              endef
+              
+              define Build/Compile
+              endef
+              
+              define Package/{pkg_name}/install
+              \t\$(INSTALL_DIR) \$(1)/
+              \ttar -C \$(1)/ -zxf \$(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true
+              endef
+              
+              \$(eval \$(call BuildPackage,{pkg_name}))
+              '''
+                              with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
+                                  mf.write(makefile_content)
+              
+                              with open('.config', 'a') as cfg:
+                                  cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
+                          print(f'Интегрировано кастомных пакетов: {len(files)}')
+                      "
     - name: Download package
       run: |
         cd openwrt
