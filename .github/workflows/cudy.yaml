@@ -316,7 +316,7 @@ TARGET_DEVICES += alfa-network_awusfree1'''
         echo 'CONFIG_PACKAGE_curl=y' >> .config
         echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
 
-        # --- ЧИСТЫЙ PYTHON СКРИПТ БЕЗ СИНТАКСИЧЕСКИХ ОШИБОК YAML ---
+        # --- ЧИСТЫЙ PYTHON СКРИПТ БЕЗ ТАБУЛЯЦИИ ---
         python3 -c "
 import os, shutil, re
 
@@ -359,8 +359,8 @@ if os.path.exists(src_dir):
             'define Build/Compile\n',
             'endef\n\n',
             f'define Package/{pkg_name}/install\n',
-            '\t\$(INSTALL_DIR) \$(1)/\n',
-            f'\ttar -C \$(1)/ -zxf \$(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n',
+            '\\t\$(INSTALL_DIR) \$(1)/\n',
+            f'\\ttar -C \$(1)/ -zxf \$(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n',
             'endef\n\n',
             f'\$(eval \$(call BuildPackage,{pkg_name}))\n'
         ]
