@@ -262,6 +262,9 @@ jobs:
             with open(path, 'w') as f:
                 f.write(content)
         "
+        # 3. Патчим скрипт 02_network для добавления конфигурации портов Cudy LT300 v3
+        # Вставляем блок настроек сети сразу после совпадения первого девайса awusfree1
+        sed -i '/alfa-network,awusfree1)/a \\talfa-network,awusfree1|cudy,lt300-v3)\n\t\tucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"\n\t\tucidef_set_interface "wwan" device "usb0" protocol "dhcp"\n\t\tuci add_list firewall.@zone.network='\''wwan'\''\n\t\tuci add_list firewall.@zone.network='\''wwan6'\''\n\t\t;;\n' target/linux/ramips/mt76x8/base-files/etc/board.d/02_network
 
         # Отключаем удаление файлов при ложной проверке 'too big > 0'
         sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
