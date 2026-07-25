@@ -47,7 +47,7 @@ jobs:
       run: |
         cd openwrt
         
-        # Записываем чистый DTS-код Cudy LT300 v3 поверх файла Альфы
+        # Clean DTS for Cudy LT300 v3
         cat << 'EOF' > target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
         // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
         
@@ -239,10 +239,9 @@ jobs:
         };
         EOF
 
-        # Заменяем сбойный блок partitions
         sed -i '/partitions {/,/};/c\		partitions {\n\t\t\tcompatible = "fixed-partitions";\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;\n\t\t};' target/linux/ramips/dts/mt7628an.dtsi
 
-        # Модифицируем mt76x8.mk под параметры Cudy через Python-файл
+        # Patch mt76x8.mk via script file
         cat << 'EOF' > patch_mk.py
 path = 'target/linux/ramips/image/mt76x8.mk'
 with open(path, 'r') as f:
@@ -266,15 +265,13 @@ EOF
         python3 patch_mk.py
         rm patch_mk.py
 
-        # Патчим 02_network для добавления конфигурации портов Cudy LT300 v3
         sed -i \
           -e '/cudy,tr1200-v1)/i \    cudy,lt300-v3)\n        ucidef_add_switch "switch0" "0:wan" "1:lan" "6@eth0"\n        ucidef_set_interface "wwan" device "usb0" protocol "dhcp"\n        uci add_list firewall.@zone[1].network='\''wwan'\''\n        uci add_list firewall.@zone[1].network='\''wwan6'\''\n        ;;' \
           -e '/hiwifi,hc5611|/i \    cudy,lt300-v3|\\' \
           -e '/hiwifi,hc5611|/a \    wan_mac=$(macaddr_add "$(cat /sys/class/net/eth0/address)" 1)' \
           target/linux/ramips/mt76x8/base-files/etc/board.d/02_network
 
-        # Отключаем удаление файлов при ложной проверке 'too big > 0'
-        sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
+        sed -i 's/rm -f \$@/@echo "Limit pool ignored"/g' include/image.mk
 
     - name: Load custom feeds
       run: |
@@ -293,32 +290,30 @@ EOF
       run: |
         cd openwrt
         
-        # --- ХАК ФИКСАЦИИ НОВОГО VERMAGIC ---
+        # Vermagic Fix
         echo "eafa93300083631197429f2213697d5b" > .vermagic
         sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
         sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
-        # ------------------------------------------
+        
         wget https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/config.buildinfo -O .config
         echo 'CONFIG_TARGET_ramips=y' >> .config
         echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
         echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
         echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
         
-        # Системные пакеты и сотовые драйверы под MeigLink (Протокол RNDIS)
         echo 'CONFIG_PACKAGE_luci=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
         echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
         echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
-        # --- доп пакеты
         echo 'CONFIG_PACKAGE_sms-tool=y' >> .config
         echo 'CONFIG_PACKAGE_luci-app-sqm=y' >> .config
         echo 'CONFIG_PACKAGE_ca-bundle=y' >> .config
         echo 'CONFIG_PACKAGE_curl=y' >> .config
         echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
 
-        # --- СОЗДАЕМ PYTHON-СКРИПТ ОТДЕЛЬНО ДЛЯ БЕЗОПАСНОСТИ YAML ---
+        # Safely execute Python logic using an isolated script file
         cat << 'EOF' > patch_config.py
 import os, shutil, re
 
@@ -332,7 +327,7 @@ if os.path.exists(dts_path):
         new_content = re.sub(pattern, replacement, content)
         with open(dts_path, 'w') as f:
             f.write(new_content)
-        print('Патч успешно применён к Alfa AWUSFREE1!')
+        print('Patch successfully applied to Alfa AWUSFREE1!')
 
 workspace = os.environ.get('GITHUB_WORKSPACE', '')
 src_dir = os.path.join(workspace, 'packages')
@@ -341,7 +336,7 @@ os.makedirs(dest_dir, exist_ok=True)
 
 if os.path.exists(src_dir):
     files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
-    t = chr(9)
+    t = chr(9)  # Tab character generated at runtime to prevent YAML tab violations
     for f in files:
         shutil.copy(os.path.join(src_dir, f), dest_dir)
         pkg_name = f.split('_')[0]
@@ -373,7 +368,7 @@ if os.path.exists(src_dir):
 
         with open('.config', 'a') as cfg:
             cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
-    print(f'Интегрировано кастомных пакетов: {len(files)}')
+    print(f'Integrated custom packages: {len(files)}')
 EOF
         python3 patch_config.py
         rm patch_config.py
@@ -391,13 +386,13 @@ EOF
         make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         cat build_dir/target-*/linux-*/linux-*/.vermagic
-        mv bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz  bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.x
+        mv bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.x
         rm bin/targets/ramips/mt76x8/*.tar.xz
         rm bin/targets/ramips/mt76x8/*.tar.zst
-        mv bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.x  bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz
+        mv bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.x bin/targets/ramips/mt76x8/openwrt-imagebuilder-23.05.6-ramips-mt76x8.Linux-x86_64.tar.xz
 
     - name: Upload firmware directory
-      uses: uses/upload-artifact@v4
+      uses: actions/upload-artifact@v4
       if: steps.compile.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_23.05.6_Cudy_LT300v3_HardPatched
