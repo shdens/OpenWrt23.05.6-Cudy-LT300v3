@@ -363,12 +363,15 @@ jobs:
                             python3 patch_config.py
                             rm patch_config.py
                                 
-                - name: Download package
-                  run: |
-                    cd openwrt
-                    make defconfig
-                    make download -j8
-
+    - name: Download package
+      run: |
+        cd openwrt
+        export TERM=xterm
+        export NONINTERACTIVE=1
+        # Безопасно обновляем .config без вызова menuconfig
+        make oldconfig < /dev/null
+        make download -j8
+        
     - name: Compile the firmware
       id: compile
       run: |
