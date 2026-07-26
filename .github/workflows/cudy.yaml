@@ -287,81 +287,81 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
     
-- name: Configure Target Config
+    - name: Configure Target Config
       run: |
-        cd openwrt
-        
-        # --- ХАК ФИКСАЦИИ НОВОГО VERMAGIC ---
-        echo "eafa93300083631197429f2213697d5b" > .vermagic
-        sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
-        sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
-        
-        wget https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/config.buildinfo -O .config
-        echo 'CONFIG_TARGET_ramips=y' >> .config
-        echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
-        echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
-        echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
-        
-        echo 'CONFIG_PACKAGE_luci=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
-        echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
-        echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
-        echo 'CONFIG_PACKAGE_sms-tool=y' >> .config
-        echo 'CONFIG_PACKAGE_luci-app-sqm=y' >> .config
-        echo 'CONFIG_PACKAGE_ca-bundle=y' >> .config
-        echo 'CONFIG_PACKAGE_curl=y' >> .config
-        echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
-
-        cat << 'EOF' > patch_config.py
-import os, shutil
-
-workspace = os.environ.get('GITHUB_WORKSPACE', '')
-src_dir = os.path.join(workspace, 'packages')
-dest_dir = 'package/local'
-os.makedirs(dest_dir, exist_ok=True)
-
-if os.path.exists(src_dir):
-    files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
-    t = chr(9)
-    for f in files:
-        shutil.copy(os.path.join(src_dir, f), dest_dir)
-        pkg_name = f.split('_')[0]
-        pkg_folder = os.path.join(dest_dir, pkg_name)
-        os.makedirs(pkg_folder, exist_ok=True)
-
-        makefile_content = (
-            "include $(TOPDIR)/rules.mk\n\n"
-            f"PKG_NAME:={pkg_name}\n"
-            "PKG_VERSION:=1.0\n"
-            "PKG_RELEASE:=1\n\n"
-            "include $(INCLUDE_DIR)/package.mk\n\n"
-            f"define Package/{pkg_name}\n"
-            "  SECTION:=custom\n"
-            "  CATEGORY:=Base system\n"
-            f"  TITLE:={pkg_name} Custom Package\n"
-            "endef\n\n"
-            "define Build/Compile\n"
-            "endef\n\n"
-            f"define Package/{pkg_name}/install\n"
-            f"{t}$(INSTALL_DIR) $(1)/\n"
-            f"{t}tar -C $(1)/ -zxf $(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n"
-            "endef\n\n"
-            f"$(eval $(call BuildPackage,{pkg_name}))\n"
-        )
-
-        with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
-            mf.write(makefile_content)
-
-        with open('.config', 'a') as cfg:
-            cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
-
-    print(f'Интегрировано кастомных пакетов: {len(files)}')
-EOF
-        python3 patch_config.py
-        rm patch_config.py
-        
+            cd openwrt
+            
+            # --- ХАК ФИКСАЦИИ НОВОГО VERMAGIC ---
+            echo "eafa93300083631197429f2213697d5b" > .vermagic
+            sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
+            sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
+            
+            wget https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/config.buildinfo -O .config
+            echo 'CONFIG_TARGET_ramips=y' >> .config
+            echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
+            echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
+            echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
+            
+            echo 'CONFIG_PACKAGE_luci=y' >> .config
+            echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
+            echo 'CONFIG_PACKAGE_kmod-usb-ohci=y' >> .config
+            echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
+            echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
+            echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
+            echo 'CONFIG_PACKAGE_sms-tool=y' >> .config
+            echo 'CONFIG_PACKAGE_luci-app-sqm=y' >> .config
+            echo 'CONFIG_PACKAGE_ca-bundle=y' >> .config
+            echo 'CONFIG_PACKAGE_curl=y' >> .config
+            echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
+    
+            cat << 'EOF' > patch_config.py
+            import os, shutil
+            
+            workspace = os.environ.get('GITHUB_WORKSPACE', '')
+            src_dir = os.path.join(workspace, 'packages')
+            dest_dir = 'package/local'
+            os.makedirs(dest_dir, exist_ok=True)
+            
+            if os.path.exists(src_dir):
+                files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
+                t = chr(9)
+                for f in files:
+                    shutil.copy(os.path.join(src_dir, f), dest_dir)
+                    pkg_name = f.split('_')[0]
+                    pkg_folder = os.path.join(dest_dir, pkg_name)
+                    os.makedirs(pkg_folder, exist_ok=True)
+            
+                    makefile_content = (
+                        "include $(TOPDIR)/rules.mk\n\n"
+                        f"PKG_NAME:={pkg_name}\n"
+                        "PKG_VERSION:=1.0\n"
+                        "PKG_RELEASE:=1\n\n"
+                        "include $(INCLUDE_DIR)/package.mk\n\n"
+                        f"define Package/{pkg_name}\n"
+                        "  SECTION:=custom\n"
+                        "  CATEGORY:=Base system\n"
+                        f"  TITLE:={pkg_name} Custom Package\n"
+                        "endef\n\n"
+                        "define Build/Compile\n"
+                        "endef\n\n"
+                        f"define Package/{pkg_name}/install\n"
+                        f"{t}$(INSTALL_DIR) $(1)/\n"
+                        f"{t}tar -C $(1)/ -zxf $(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n"
+                        "endef\n\n"
+                        f"$(eval $(call BuildPackage,{pkg_name}))\n"
+                    )
+            
+                    with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
+                        mf.write(makefile_content)
+            
+                    with open('.config', 'a') as cfg:
+                        cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
+            
+                print(f'Интегрировано кастомных пакетов: {len(files)}')
+            EOF
+                    python3 patch_config.py
+                    rm patch_config.py
+                
     - name: Compile the firmware
       id: compile
       run: |
