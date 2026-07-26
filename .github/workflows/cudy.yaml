@@ -314,21 +314,9 @@ jobs:
             echo 'CONFIG_PACKAGE_curl=y' >> .config
             echo 'CONFIG_PACKAGE_coreutils-stty=y' >> .config
     
-            # Генерация и запуск Python скрипта без проблем с YAML-отступами
+            # Генерация и запуск Python скрипта без дублирования свойств DTS
             cat << 'EOF' > patch_config.py
-            import os, shutil, re
-            
-            dts_path = 'target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts'
-            if os.path.exists(dts_path):
-                with open(dts_path, 'r') as f:
-                    content = f.read()
-                pattern = r'(partitions\s*\{\s*compatible\s*=\s*\"fixed-partitions\";)'
-                replacement = r'\1\n\t\t\t#address-cells = <1>;\n\t\t\t#size-cells = <1>;'
-                if re.search(pattern, content):
-                    new_content = re.sub(pattern, replacement, content)
-                    with open(dts_path, 'w') as f:
-                        f.write(new_content)
-                    print('Патч DTS успешно применён!')
+            import os, shutil
             
             workspace = os.environ.get('GITHUB_WORKSPACE', '')
             src_dir = os.path.join(workspace, 'packages')
@@ -337,7 +325,7 @@ jobs:
             
             if os.path.exists(src_dir):
                 files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
-                t = chr(9) # Генерируем реальную табуляцию (\t) для Makefile
+                t = chr(9) # Табуляция для Makefile
                 for f in files:
                     shutil.copy(os.path.join(src_dir, f), dest_dir)
                     pkg_name = f.split('_')[0]
@@ -374,12 +362,12 @@ jobs:
             EOF
                     python3 patch_config.py
                     rm patch_config.py
-                    
-    - name: Download package
-      run: |
-        cd openwrt
-        make defconfig
-        make download -j8
+                                
+                - name: Download package
+                  run: |
+                    cd openwrt
+                    make defconfig
+                    make download -j8
 
     - name: Compile the firmware
       id: compile
