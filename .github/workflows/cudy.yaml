@@ -359,7 +359,7 @@ jobs:
                                 cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
                     
                         print(f'Интегрировано кастомных пакетов: {len(files)}')
-                    EOF
+                        EOF
                             python3 patch_config.py
                             rm patch_config.py
                                 
