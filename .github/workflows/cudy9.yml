@@ -298,7 +298,7 @@ jobs:
         for line in lines:
             if 'cudy,wr1000)' in line:
                 new_lines.append('	cudy,lt300-v3)\n')
-                new_lines.append('		ucidef_set_led_netdev \"internet\" \"internet\" \"white:status\" \"usb0\"\n')
+                new_lines.append('		ucidef_set_led_netdev \"internet\" \"internet\" \"red:status\" \"usb0\"\n')
                 new_lines.append('		;;\n')
             new_lines.append(line)
             
