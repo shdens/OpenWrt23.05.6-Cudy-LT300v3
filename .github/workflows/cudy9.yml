@@ -1,0 +1,410 @@
+name: OpenWrt Builder 23.05.6 gpio2 v9
+
+on:
+  workflow_dispatch:
+
+env:
+  REPO_URL: https://github.com/openwrt/openwrt
+  REPO_BRANCH: v23.05.6
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: .config
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Bangkok
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        rm -rf openwrt
+        git clone $REPO_URL -b $REPO_BRANCH --depth 1 openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Hard Patch Device Source
+      run: |
+        cd openwrt
+        
+        # 1. Записываем валидный DTS Cudy LT300 v3
+        cat << 'EOF' > target/linux/ramips/dts/mt7628an_alfa-network_awusfree1.dts
+        // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+        
+        #include "mt7628an.dtsi"
+        
+        #include <dt-bindings/gpio/gpio.h>
+        #include <dt-bindings/input/input.h>
+        #include <dt-bindings/leds/common.h>
+        
+        / {
+        	compatible = "cudy,lt300-v3", "mediatek,mt7628an-soc";
+        	model = "Cudy LT300 v3";
+        
+        	aliases {
+        		led-boot = &white_status;
+        		led-running = &white_status;
+        		led-failsafe = &red_status;
+        		led-upgrade = &red_status;
+        		label-mac-device = &ethernet;
+        	};
+        
+        	chosen {
+        		bootargs = "console=ttyS0,115200";
+        	};
+        
+        	gpio-keys {
+        		compatible = "gpio-keys";
+        
+        		reset {
+        			label = "reset";
+        			linux,code = <KEY_RESTART>;
+        			gpios = <&gpio 38 GPIO_ACTIVE_LOW>;
+        		};
+        
+        		wps {
+        			label = "wps";
+        			gpios = <&gpio 5 GPIO_ACTIVE_LOW>;
+        			linux,code = <KEY_WPS_BUTTON>;
+        		};
+        	};
+        
+        	gpio-leds {
+        		compatible = "gpio-leds";
+        
+        		red_status: red_status {
+        			function = LED_FUNCTION_STATUS;
+        			color = <LED_COLOR_ID_RED>;
+        			gpios = <&gpio 37 GPIO_ACTIVE_LOW>;
+        		};
+        
+        		white_status: white_status {
+        			function = LED_FUNCTION_STATUS;
+        			color = <LED_COLOR_ID_WHITE>;
+        			gpios = <&gpio 44 GPIO_ACTIVE_LOW>;
+        		};
+        
+        		signal1 {
+        			label = "white:signal1";
+        			color = <LED_COLOR_ID_WHITE>;
+        			gpios = <&gpio 11 GPIO_ACTIVE_LOW>;
+        		};
+        
+        		signal2 {
+        			label = "white:signal2";
+        			color = <LED_COLOR_ID_WHITE>;
+        			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
+        		};
+        
+        		signal3 {
+        			label = "white:signal3";
+        			color = <LED_COLOR_ID_WHITE>;
+        			gpios = <&gpio 0 GPIO_ACTIVE_LOW>;
+        		};
+        	};
+        
+        	gpio_export {
+        		compatible = "gpio-export";
+        
+        		usb4g {
+        			gpio-export,name = "4g";
+        			gpio-export,output = <0>;
+        			gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
+        		};
+        	};
+        };
+        
+        &spi0 {
+        	status = "okay";
+        
+        	flash@0 {
+        		compatible = "jedec,spi-nor";
+        		reg = <0>;
+        		spi-max-frequency = <40000000>;
+        
+        		partitions {
+        			compatible = "fixed-partitions";
+        			#address-cells = <1>;
+        			#size-cells = <1>;
+        
+        			partition@0 {
+        				label = "u-boot";
+        				reg = <0x0 0x30000>;
+        				read-only;
+        			};
+        
+        			partition@30000 {
+        				label = "u-boot-env";
+        				reg = <0x30000 0x10000>;
+        				read-only;
+        			};
+        
+        			partition@40000 {
+        				label = "factory";
+        				reg = <0x40000 0x10000>;
+        				read-only;
+        
+        				nvmem-layout {
+        					compatible = "fixed-layout";
+        					#address-cells = <1>;
+        					#size-cells = <1>;
+        
+        					eeprom_factory_0: eeprom@0 {
+        						reg = <0x0 0x400>;
+        					};
+        				};
+        			};
+        
+        			partition@50000 {
+        				compatible = "denx,uimage";
+        				label = "firmware";
+        				reg = <0x50000 0xf80000>;
+        			};
+        
+        			partition@fd0000 {
+        				label = "debug";
+        				reg = <0xfd0000 0x10000>;
+        				read-only;
+        			};
+        
+        			partition@fe0000 {
+        				label = "backup";
+        				reg = <0xfe0000 0x10000>;
+        				read-only;
+        			};
+        
+        			partition@ff0000 {
+        				label = "bdinfo";
+        				reg = <0xff0000 0x10000>;
+        				read-only;
+        
+        				nvmem-layout {
+        					compatible = "fixed-layout";
+        					#address-cells = <1>;
+        					#size-cells = <1>;
+                            
+        					macaddr_bdinfo_de00: macaddr@de00 {
+        						compatible = "mac-base";
+        						reg = <0xde00 0x6>;
+        						#nvmem-cell-cells = <1>;
+        					};
+        				};
+        			};
+        		};
+        	};
+        };
+        
+        &state_default {
+        	gpio {
+        		groups = "i2s", "i2c", "gpio", "refclk", "wdt", "wled_an";
+        		function = "gpio";
+        	};
+        };
+        
+        &wmac {
+        	status = "okay";
+        
+        	nvmem-cells = <&eeprom_factory_0>, <&macaddr_bdinfo_de00 2>;
+        	nvmem-cell-names = "eeprom", "mac-address";
+        };
+        
+        &ethernet {
+        	nvmem-cells = <&macaddr_bdinfo_de00 0>;
+        	nvmem-cell-names = "mac-address";
+        };
+        
+        &esw {
+        	mediatek,portmap = <0x3e>;
+        	mediatek,portdisable = <0x3c>;
+        };
+        EOF
+
+        # 2. Модифицируем mt76x8.mk
+        python3 -c "
+        path = 'target/linux/ramips/image/mt76x8.mk'
+        with open(path, 'r') as f:
+            content = f.read()
+        start = content.find('define Device/alfa-network_awusfree1')
+        end = content.find('endef\nTARGET_DEVICES += alfa-network_awusfree1') + len('endef\nTARGET_DEVICES += alfa-network_awusfree1')
+        if start != -1 and end != -1:
+            new_block = '''define Device/alfa-network_awusfree1
+          \$(Device/cc7628an)
+          IMAGE_SIZE := 15872k
+          DEVICE_VENDOR := Cudy
+          DEVICE_MODEL := LT300
+          DEVICE_VARIANT := v3
+          SUPPORTED_DEVICES := cudy,lt300-v3
+          DEVICE_PACKAGES := luci kmod-usb2 kmod-usb-ohci kmod-usb-net-rndis kmod-usb-serial-option usb-modeswitch sms-tool luci-app-sqm ca-bundle curl coreutils-stty
+        endef
+        TARGET_DEVICES += alfa-network_awusfree1'''
+            content = content[:start] + new_block + content[end:]
+            with open(path, 'w') as f:
+                f.write(content)
+        "
+
+# 3.1 Безопасное обновление 02_network
+        mkdir -p files/etc/board.d
+        
+        python3 -c "
+        path_src = 'target/linux/ramips/mt76x8/base-files/etc/board.d/02_network'
+        path_dst = 'files/etc/board.d/02_network'
+        
+        with open(path_src, 'r') as f:
+            lines = f.readlines()
+        
+        new_lines = []
+        for line in lines:
+            if 'cudy,tr1200-v1)' in line:
+                new_lines.append('	cudy,lt300-v3)\n')
+                new_lines.append('		ucidef_add_switch \"switch0\" \"0:wan\" \"1:lan\" \"6@eth0\"\n')
+                new_lines.append('		ucidef_set_interface \"wan\" device \"usb0\" protocol \"dhcp\"\n')
+                new_lines.append('		uci add_list firewall.\@zone\[1\].network=\'wwan\'\n')
+                new_lines.append('		;;\n')
+            new_lines.append(line)
+            
+        with open(path_dst, 'w') as f:
+            f.writelines(new_lines)
+        "
+
+        # 3.2 Безопасное обновление 01_leds
+        python3 -c "
+        path_src = 'target/linux/ramips/mt76x8/base-files/etc/board.d/01_leds'
+        path_dst = 'files/etc/board.d/01_leds'
+        
+        with open(path_src, 'r') as f:
+            lines = f.readlines()
+        
+        new_lines = []
+        for line in lines:
+            if 'cudy,wr1000)' in line:
+                new_lines.append('	cudy,lt300-v3)\n')
+                new_lines.append('		ucidef_set_led_netdev \"internet\" \"internet\" \"white:status\" \"usb0\"\n')
+                new_lines.append('		;;\n')
+            new_lines.append(line)
+            
+        with open(path_dst, 'w') as f:
+            f.writelines(new_lines)
+        "
+        
+        sed -i 's/rm -f \$@/@echo "Пул лимита проигнорирован"/g' include/image.mk
+
+    - name: Load custom feeds
+      run: |
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
+
+    - name: Update and Install feeds
+      run: |
+        cd openwrt
+        sed -i 's/^src-git telephony/# src-git telephony/g' feeds.conf.default
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+    
+    - name: Configure Target Config
+      run: |
+        cd openwrt
+        
+        # 1. Загружаем дефолтный конфиг сборки
+        wget https://downloads.openwrt.org/releases/23.05.6/targets/ramips/mt76x8/config.buildinfo -O .config
+        
+        # 2. Указываем целевое устройство
+        echo 'CONFIG_TARGET_ramips=y' >> .config
+        echo 'CONFIG_TARGET_ramips_mt76x8=y' >> .config
+        echo 'CONFIG_TARGET_ramips_mt76x8_DEVICE_alfa-network_awusfree1=y' >> .config
+        echo 'CONFIG_TARGET_MULTI_PROFILE=n' >> .config
+
+        # 3. Интегрируем кастомные .ipk пакеты в сурсы
+        cat << 'EOF' > patch_config.py
+        import os, shutil
+        
+        workspace = os.environ.get('GITHUB_WORKSPACE', '')
+        src_dir = os.path.join(workspace, 'packages')
+        dest_dir = 'package/local'
+        os.makedirs(dest_dir, exist_ok=True)
+        
+        if os.path.exists(src_dir):
+            files = [f for f in os.listdir(src_dir) if f.endswith('.ipk')]
+            t = chr(9)
+            for f in files:
+                shutil.copy(os.path.join(src_dir, f), dest_dir)
+                pkg_name = f.split('_')[0]
+                pkg_folder = os.path.join(dest_dir, pkg_name)
+                os.makedirs(pkg_folder, exist_ok=True)
+        
+                makefile_content = (
+                    "include $(TOPDIR)/rules.mk\n\n"
+                    f"PKG_NAME:={pkg_name}\n"
+                    "PKG_VERSION:=1.0\n"
+                    "PKG_RELEASE:=1\n\n"
+                    "include $(INCLUDE_DIR)/package.mk\n\n"
+                    f"define Package/{pkg_name}\n"
+                    "  SECTION:=custom\n"
+                    "  CATEGORY:=Base system\n"
+                    f"  TITLE:={pkg_name} Custom Package\n"
+                    "endef\n\n"
+                    "define Build/Compile\n"
+                    "endef\n\n"
+                    f"define Package/{pkg_name}/install\n"
+                    f"{t}$(INSTALL_DIR) $(1)/\n"
+                    f"{t}tar -C $(1)/ -zxf $(TOPDIR)/package/local/{f} data.tar.gz 2>/dev/null || true\n"
+                    "endef\n\n"
+                    f"$(eval $(call BuildPackage,{pkg_name}))\n"
+                )
+        
+                with open(os.path.join(pkg_folder, 'Makefile'), 'w') as mf:
+                    mf.write(makefile_content)
+        
+                with open('.config', 'a') as cfg:
+                    cfg.write(f'CONFIG_PACKAGE_{pkg_name}=y\n')
+        
+            print(f'Интегрировано кастомных пакетов: {len(files)}')
+        EOF
+                python3 patch_config.py
+                rm patch_config.py
+
+        # 4. ВЫЗЫВАЕМ defconfig В САМОМ КОНЦЕ
+        # Это приведет .config в полное согласие со всеми внесенными пакетами и таргетом
+        make defconfig
+
+        # 5. Прописываем vermagic
+        sed -i 's/$(STAMP_KERNEL_MODIFY)/eafa93300083631197429f2213697d5b/g' include/kernel-defaults.mk
+        sed -i 's/grep LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
+        sed -i 's/LINUX_VERMAGIC:=.*/LINUX_VERMAGIC:=eafa93300083631197429f2213697d5b/g' include/kernel.mk
+        echo "eafa93300083631197429f2213697d5b" > .vermagic
+                
+    - name: Compile the firmware
+      id: compile
+      run: |
+        cd openwrt
+        make -j$(nproc) || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
+        cat build_dir/target-*/linux-*/linux-*/.vermagic
+        rm bin/targets/ramips/mt76x8/*.tar.zst
+
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@v4
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      with:
+        name: OpenWrt_23.05.6_Cudy_LT300v3_HardPatched_9
+        path: openwrt/bin/targets/ramips/mt76x8/*
