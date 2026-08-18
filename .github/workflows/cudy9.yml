@@ -316,7 +316,7 @@ jobs:
         uci set wireless.radio0.disabled='0'
         
         # При необходимости можно сразу настроить имя сети и пароль:
-        # uci set wireless.default_radio0.ssid='ADKU'
+        uci set wireless.default_radio0.ssid='ADKU'
         # uci set wireless.default_radio0.encryption='psk2'
         # uci set wireless.default_radio0.key='1234567890'
         
